@@ -38,7 +38,7 @@ export const LAYERS: LayerDef[] = [
   { id: "naturalEvents", label: "Natural events", color: "#ff8a5b", status: "active", feed: "events", eventKinds: ["disaster"], providerNote: "NASA EONET" },
   { id: "news", label: "News & entities", color: "#54c7ff", status: "active", feed: "news", providerNote: "GDELT" },
   { id: "maritime", label: "Maritime / AIS", color: "#4fd6d1", status: "active", feed: "vessels", providerNote: "MarineTraffic vault (needs API key)" },
-  { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "planned", providerNote: "ACLED (planned)" },
+  { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "active", feed: "events", providerNote: "ACLED (needs myACLED login)" },
   { id: "cyber", label: "Cyber exposure", color: "#b18cff", status: "planned", providerNote: "CISA KEV / NVD (planned)" },
   { id: "weather", label: "Weather (cities)", color: "#9ad7ff", status: "active", feed: "weather", providerNote: "Open-Meteo current conditions" },
   { id: "markets", label: "Markets", color: "#ffd166", status: "planned", providerNote: "Market feed (planned)" },

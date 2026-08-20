@@ -169,6 +169,18 @@ export default function Globe() {
     return () => { viewer.dataSources.remove(ds, true); };
   }, [ready, app.layers.earthquakes, app.layers.naturalEvents, app.events.rows]);
 
+  // --- conflict layer (ACLED events from the vault) -------------------------
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!ready || !viewer) return;
+    const ds = new CustomDataSource("conflict");
+    if (app.layers.conflict) {
+      for (const e of app.conflict.rows) addEvent(ds, e);
+      viewer.dataSources.add(ds);
+    }
+    return () => { viewer.dataSources.remove(ds, true); };
+  }, [ready, app.layers.conflict, app.conflict.rows]);
+
   // --- news layer -----------------------------------------------------------
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;

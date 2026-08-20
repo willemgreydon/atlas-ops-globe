@@ -1,0 +1,50 @@
+{
+  "status": 200,
+  "success": true,
+  "count": 3,
+  "data": [
+    {
+      "event_id_cnty": "GEO3998",
+      "event_date": "2023-02-01",
+      "disorder_type": "Demonstrations",
+      "event_type": "Protests",
+      "sub_event_type": "Peaceful protest",
+      "actor1": "Protesters (Georgia)",
+      "actor2": "",
+      "country": "Georgia",
+      "iso": "268",
+      "location": "Kutaisi",
+      "latitude": "42.2639",
+      "longitude": "42.6999",
+      "fatalities": "0",
+      "source": "RFE/RL",
+      "notes": "On 1 February 2023, labor group protesters gathered in Kutaisi."
+    },
+    {
+      "event_id_cnty": "UKR12345",
+      "event_date": "2026-08-18",
+      "disorder_type": "Political violence",
+      "event_type": "Explosions/Remote violence",
+      "sub_event_type": "Shelling/artillery/missile attack",
+      "actor1": "Military Forces of Russia",
+      "actor2": "Civilians (Ukraine)",
+      "country": "Ukraine",
+      "iso": "804",
+      "location": "Kharkiv",
+      "latitude": 49.9935,
+      "longitude": 36.2304,
+      "fatalities": 3,
+      "source": "Media report",
+      "notes": "Reported strike affecting a residential area."
+    },
+    {
+      "event_id_cnty": "BADCOORD1",
+      "event_date": "2026-08-18",
+      "event_type": "Protests",
+      "country": "Nowhere",
+      "latitude": "",
+      "longitude": "",
+      "fatalities": "0"
+    }
+  ]
+}

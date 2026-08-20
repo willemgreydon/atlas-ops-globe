@@ -142,11 +142,13 @@ export const SOURCES: SourceRecord[] = [
     envKeys: ["RELIEFWEB_APPNAME"], acquisition: A({ cacheTtlSec: 3600 }),
   },
   {
-    id: "acled", name: "ACLED", domains: ["conflict"], type: "api",
-    baseUrl: "https://api.acleddata.com/", auth: "oauth", polling: true,
+    id: "acled", name: "ACLED (Armed Conflict Location & Event Data)", domains: ["conflict"], type: "api",
+    baseUrl: "https://acleddata.com/api/acled/read", auth: "oauth", polling: true,
     license: "ACLED licence", commercialUse: "restricted", redistribution: "restricted",
-    attributionRequired: true, attribution: "ACLED", enabled: false, status: "credential-required",
-    envKeys: ["ACLED_CLIENT_ID", "ACLED_CLIENT_SECRET"], acquisition: A({ cacheTtlSec: 3600 }),
+    attributionRequired: true, attribution: "ACLED (acleddata.com)", enabled: false, status: "credential-required",
+    envKeys: ["ACLED_USERNAME", "ACLED_PASSWORD"],
+    acquisition: A({ minIntervalSec: 2, cacheTtlSec: 3600, concurrency: 1 }),
+    notes: "OAuth2 password grant (client_id=acled), 24h token cached in memory. Political violence, protests, strategic developments with lat/lon + fatalities. CLI: pnpm intel:sync conflict.",
   },
   {
     id: "aisstream", name: "AISstream", domains: ["maritime"], type: "api",

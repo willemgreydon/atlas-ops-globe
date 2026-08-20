@@ -1,8 +1,9 @@
 {
   "domain": "conflict",
-  "status": "scaffolded",
-  "sources": ["reliefweb", "acled"],
-  "canonicalEntities": ["ConflictEvent", "Event"],
+  "status": "implemented-credential-required",
+  "sources": ["acled"],
+  "canonicalEntities": ["ConflictEvent", "Person", "Organization"],
   "storage": ["events", "relationships", "provenance"],
+  "note": "ACLED (OAuth password grant). Political violence, protests, strategic developments with lat/lon + fatalities. OFFLINE until ACLED_USERNAME/ACLED_PASSWORD are set. Neutral labelling; fatalities only when ACLED reports them.",
   "updatedAt": "2026-08-20"
 }

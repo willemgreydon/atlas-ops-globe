@@ -103,6 +103,8 @@ interface AppState {
   weather: Feed<WeatherRow>;
   /** Market quotes from the vault (Finnhub); drives the ticker. */
   markets: Feed<MarketRow>;
+  /** Conflict/unrest events from the vault (ACLED). */
+  conflict: Feed<WorldEvent>;
   /** Aggregated vault snapshot (SQLite-backed), or null while loading. */
   vault: VaultSnapshot | null;
   /** Fly-to request consumed by the globe; bumped on each navigation. */
@@ -112,19 +114,38 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
-const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, weather: 600_000, markets: 30_000, vault: 60_000 } as const;
+const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, weather: 600_000, markets: 30_000, conflict: 120_000, vault: 60_000 } as const;
+
+/** Map a flat vault event row ({lat,lon,...}) to a WorldEvent ({location}). */
+function vaultEventToWorld(r: Record<string, unknown>): WorldEvent {
+  return {
+    id: String(r.id),
+    kind: (r.kind as WorldEvent["kind"]) ?? "conflict",
+    title: String(r.title ?? ""),
+    summary: (r.summary as string) ?? undefined,
+    severity: (r.severity as WorldEvent["severity"]) ?? "watch",
+    occurredAt: String(r.occurredAt ?? new Date().toISOString()),
+    location: { lat: Number(r.lat), lon: Number(r.lon) },
+    countryCode: (r.countryCode as string) ?? undefined,
+    source: String(r.source ?? "ACLED"),
+    sourceUrl: (r.sourceUrl as string) ?? undefined,
+    confidence: (r.confidence as number) ?? undefined,
+    tags: Array.isArray(r.tags) ? (r.tags as string[]) : [],
+  };
+}
 
 function defaultLayerVisibility(mode: ModeId): Record<LayerId, boolean> {
   const on = new Set(MODE_BY_ID[mode].defaultLayers);
   return Object.fromEntries(LAYERS.map((l) => [l.id, on.has(l.id)])) as Record<LayerId, boolean>;
 }
 
-async function fetchFeed<T>(url: string): Promise<{ rows: T[]; meta: FeedMeta }> {
+async function fetchFeed<T>(url: string, map?: (raw: Record<string, unknown>) => T): Promise<{ rows: T[]; meta: FeedMeta }> {
   const res = await fetch(url, { cache: "no-store" });
   const json = await res.json();
   // Live-provider routes return { rows, status, ... }; vault routes return
   // { data, page, status?, provider? }. Handle both shapes uniformly.
-  const rows: T[] = json.rows ?? json.data ?? [];
+  const raw: Record<string, unknown>[] = json.rows ?? json.data ?? [];
+  const rows: T[] = map ? raw.map(map) : (raw as T[]);
   const meta: FeedMeta = {
     status: json.status ?? (json.data !== undefined ? "live" : "offline"),
     source: json.source ?? json.provider ?? "vault",
@@ -158,7 +179,7 @@ function useVaultSnapshot(): VaultSnapshot | null {
   return snap;
 }
 
-function useFeed<T>(url: string, intervalMs: number, active: boolean): Feed<T> {
+function useFeed<T>(url: string, intervalMs: number, active: boolean, map?: (raw: Record<string, unknown>) => T): Feed<T> {
   const [state, setState] = useState<Feed<T>>({ rows: [], meta: null, loading: true });
   useEffect(() => {
     if (!active) {
@@ -168,7 +189,7 @@ function useFeed<T>(url: string, intervalMs: number, active: boolean): Feed<T> {
     let live = true;
     const load = async () => {
       try {
-        const { rows, meta } = await fetchFeed<T>(url);
+        const { rows, meta } = await fetchFeed<T>(url, map);
         if (live) setState({ rows, meta, loading: false });
       } catch (err) {
         if (live)
@@ -230,6 +251,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const weather = useFeed<WeatherRow>("/api/intelligence/weather?limit=200", POLL_MS.weather, layers.weather);
   // Markets drive the always-visible ticker, so poll regardless of layers.
   const markets = useFeed<MarketRow>("/api/intelligence/markets?limit=20", POLL_MS.markets, true);
+  // Conflict/unrest (ACLED) from the vault; mapped to WorldEvent for the globe.
+  const conflict = useFeed<WorldEvent>("/api/intelligence/events?kind=conflict&limit=500", POLL_MS.conflict, layers.conflict, vaultEventToWorld);
   const vault = useVaultSnapshot();
 
   const value = useMemo<AppState>(
@@ -248,11 +271,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       vessels,
       weather,
       markets,
+      conflict,
       vault,
       flyTo,
       requestFlyTo,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, weather, markets, vault, flyTo, requestFlyTo],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, weather, markets, conflict, vault, flyTo, requestFlyTo],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

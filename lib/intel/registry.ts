@@ -9,6 +9,7 @@ import { ingestAviationSnapshot } from "./domains/aviation";
 import { ingestMaritime } from "./domains/maritime";
 import { ingestWeather } from "./domains/weather";
 import { ingestMarkets } from "./domains/markets";
+import { ingestConflict } from "./domains/conflict";
 
 export interface IngestOpts {
   query?: string;
@@ -27,6 +28,7 @@ export const INGESTORS: Record<string, (o: IngestOpts) => Promise<IngestReport>>
   maritime: () => ingestMaritime(),
   weather: () => ingestWeather(),
   markets: () => ingestMarkets(),
+  conflict: (o) => ingestConflict({ limit: o.limit }),
   news: (o) => ingestNews(o.query),
 };
 

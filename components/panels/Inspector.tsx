@@ -31,7 +31,7 @@ export default function Inspector() {
     const a = app.aircraft.rows.find((r) => r.id === sel.id);
     body = a ? <AircraftView a={a} /> : <Missing kind="Aircraft" />;
   } else if (sel.kind === "event") {
-    const e = app.events.rows.find((r) => r.id === sel.id);
+    const e = app.events.rows.find((r) => r.id === sel.id) ?? app.conflict.rows.find((r) => r.id === sel.id);
     body = e ? <EventView e={e} /> : <Missing kind="Event" />;
   } else if (sel.kind === "news") {
     const n = app.news.rows.find((r) => r.id === sel.id);
