@@ -1,0 +1,8 @@
+{
+  "domain": "cyber",
+  "status": "implemented",
+  "sources": ["cisa-kev", "nvd"],
+  "canonicalEntities": ["CyberEvent"],
+  "storage": ["vulnerabilities", "provenance"],
+  "updatedAt": "2026-08-20"
+}

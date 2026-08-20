@@ -1,0 +1,8 @@
+{
+  "domain": "weather",
+  "status": "scaffolded",
+  "sources": ["openmeteo"],
+  "canonicalEntities": ["WeatherObservation"],
+  "storage": ["weather_observations", "provenance"],
+  "updatedAt": "2026-08-20"
+}

@@ -1,0 +1,8 @@
+{
+  "domain": "infrastructure",
+  "status": "scaffolded",
+  "sources": ["ourairports"],
+  "canonicalEntities": ["InfrastructureAsset", "Airport", "Port"],
+  "storage": ["airports", "ports", "entities", "provenance"],
+  "updatedAt": "2026-08-20"
+}

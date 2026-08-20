@@ -1,0 +1,8 @@
+{
+  "domain": "environment",
+  "status": "scaffolded",
+  "sources": ["eonet", "openmeteo"],
+  "canonicalEntities": ["EnvironmentalObservation"],
+  "storage": ["weather_observations", "entities", "provenance"],
+  "updatedAt": "2026-08-20"
+}

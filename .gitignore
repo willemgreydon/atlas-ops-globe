@@ -14,3 +14,15 @@ coverage
 # Next.js auto-generated AI agent files
 /AGENTS.md
 /CLAUDE.md
+
+# --- Intelligence Vault: generated / high-volume data (not committed) ---
+# SQLite database + WAL/SHM
+/data/*.db
+/data/*.db-shm
+/data/*.db-wal
+# Raw provider snapshots + generated artifacts that churn every run
+/intelligence/**/raw/
+/intelligence/**/snapshots/
+/intelligence/_core/manifests/status.json
+/intelligence/_core/indexes/
+# Committed on purpose (small, stable): schemas, ontology.json, sources/registry.json, READMEs, manifest.json

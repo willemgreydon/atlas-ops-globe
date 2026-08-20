@@ -1,0 +1,8 @@
+{
+  "domain": "global",
+  "status": "implemented",
+  "sources": ["naturalearth", "gdelt"],
+  "canonicalEntities": ["Country", "Region"],
+  "storage": ["countries", "provenance", "entities"],
+  "updatedAt": "2026-08-20"
+}

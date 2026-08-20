@@ -11,5 +11,7 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     exclude: ["tests/e2e/**", "node_modules/**"],
+    // Node built-in; must not be bundled/transformed by Vite.
+    server: { deps: { external: [/node:sqlite/] } },
   },
 });

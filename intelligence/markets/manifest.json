@@ -1,0 +1,8 @@
+{
+  "domain": "markets",
+  "status": "scaffolded",
+  "sources": [],
+  "canonicalEntities": ["MarketInstrument", "MarketObservation"],
+  "storage": ["market_observations", "provenance"],
+  "updatedAt": "2026-08-20"
+}

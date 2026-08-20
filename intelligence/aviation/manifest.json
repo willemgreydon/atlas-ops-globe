@@ -1,0 +1,8 @@
+{
+  "domain": "aviation",
+  "status": "implemented",
+  "sources": ["opensky", "ourairports"],
+  "canonicalEntities": ["Aircraft", "Flight", "Airport", "Airline"],
+  "storage": ["aircraft", "airports", "provenance"],
+  "updatedAt": "2026-08-20"
+}

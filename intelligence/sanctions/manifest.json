@@ -1,0 +1,8 @@
+{
+  "domain": "sanctions",
+  "status": "scaffolded",
+  "sources": ["ofac"],
+  "canonicalEntities": ["Sanction"],
+  "storage": ["sanctions", "provenance"],
+  "updatedAt": "2026-08-20"
+}

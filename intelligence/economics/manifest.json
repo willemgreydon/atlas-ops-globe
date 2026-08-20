@@ -1,0 +1,8 @@
+{
+  "domain": "economics",
+  "status": "implemented",
+  "sources": ["worldbank"],
+  "canonicalEntities": ["EconomicIndicator", "EconomicEvent"],
+  "storage": ["economic_observations", "provenance"],
+  "updatedAt": "2026-08-20"
+}

@@ -1,0 +1,8 @@
+{
+  "domain": "news",
+  "status": "implemented",
+  "sources": ["gdelt", "wikidata"],
+  "canonicalEntities": ["NewsArticle", "NewsStory", "Publication"],
+  "storage": ["news_articles", "news_stories", "fts_news", "relationships", "provenance"],
+  "updatedAt": "2026-08-20"
+}

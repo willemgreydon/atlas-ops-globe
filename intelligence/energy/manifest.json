@@ -1,0 +1,8 @@
+{
+  "domain": "energy",
+  "status": "scaffolded",
+  "sources": [],
+  "canonicalEntities": ["EnergyAsset"],
+  "storage": ["entities", "provenance"],
+  "updatedAt": "2026-08-20"
+}

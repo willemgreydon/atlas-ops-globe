@@ -1,0 +1,8 @@
+{
+  "domain": "politics",
+  "status": "scaffolded",
+  "sources": ["wikidata"],
+  "canonicalEntities": ["Person", "PublicFigure", "GovernmentOrganization", "InternationalOrganization", "PoliticalEvent"],
+  "storage": ["persons", "organizations", "entities", "relationships", "provenance"],
+  "updatedAt": "2026-08-20"
+}

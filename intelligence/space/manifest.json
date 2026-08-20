@@ -1,0 +1,8 @@
+{
+  "domain": "space",
+  "status": "implemented",
+  "sources": ["celestrak"],
+  "canonicalEntities": ["Satellite", "SpaceObject", "Orbit"],
+  "storage": ["space_objects", "provenance"],
+  "updatedAt": "2026-08-20"
+}

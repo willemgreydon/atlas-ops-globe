@@ -71,6 +71,36 @@ docs/              architecture, providers, data model, roadmap, security, licen
 See [`docs/`](docs) for the full engineering documentation, including the ADR
 log in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
+## Intelligence Vault
+
+Beneath the globe is a machine-readable **Intelligence Vault** — a local
+lakehouse/knowledge-graph that discovers, normalizes, enriches, links and
+indexes public/open data with full provenance. It is a product in its own right;
+the globe is one way to query it.
+
+```bash
+pnpm intel:bootstrap   # populate a baseline vault (countries, disasters, economics, cyber, space, news)
+pnpm intel:stats       # real record counts
+pnpm intel:update      # incremental refresh
+pnpm intel:sources     # source registry + licensing posture
+pnpm intel:validate    # DB integrity + migrations
+```
+
+- **Storage:** Node's built-in `node:sqlite` at `data/intelligence.db` (gitignored,
+  no native deps) with FTS5 search and versioned migrations.
+- **Live zero-credential sources:** Natural Earth (countries), USGS + NASA EONET
+  (disasters), World Bank (economics), CISA KEV + NVD (cyber), CelesTrak
+  (space, SGP4-ready orbits), GDELT (news), OpenSky (aircraft snapshot).
+- **Discipline:** every record keeps provenance; relationships carry a `basis`
+  (`direct` / `reported` / `spatially-near` / …) so inferred links are never shown
+  as facts; unavailable metrics are `null`, never fabricated.
+- **API:** `/api/intelligence/{global,stats,countries,countries/[code],events,
+  disasters,news,cyber,space}` — paginated, with `country` / `bbox` / `since`
+  filters, reading from SQLite.
+
+See [`intelligence/README.md`](intelligence/README.md) and
+[`docs/intelligence/`](docs/intelligence) (API catalog, source matrix, coverage gaps).
+
 ## Production direction
 
 The local build uses in-memory caching and a mock-fallback layer. The interfaces

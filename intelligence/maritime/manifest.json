@@ -1,0 +1,8 @@
+{
+  "domain": "maritime",
+  "status": "scaffolded",
+  "sources": ["aisstream"],
+  "canonicalEntities": ["Vessel", "Voyage", "Port"],
+  "storage": ["vessels", "ports", "provenance"],
+  "updatedAt": "2026-08-20"
+}

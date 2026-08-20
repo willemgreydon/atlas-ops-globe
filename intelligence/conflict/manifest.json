@@ -1,0 +1,8 @@
+{
+  "domain": "conflict",
+  "status": "scaffolded",
+  "sources": ["reliefweb", "acled"],
+  "canonicalEntities": ["ConflictEvent", "Event"],
+  "storage": ["events", "relationships", "provenance"],
+  "updatedAt": "2026-08-20"
+}
