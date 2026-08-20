@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { log } from "@/lib/core/logger";
+import { corePath } from "./paths";
 
 /**
  * Ingest-job framework. Wraps a domain sync with timing, structured logging,
@@ -80,7 +80,7 @@ export async function runIngestor(
   return report;
 }
 
-const STATUS_PATH = resolve(process.cwd(), "intelligence", "_core", "manifests", "status.json");
+const STATUS_PATH = corePath("manifests", "status.json");
 
 /** Merge reports into the vault status manifest (intelligence/_core/manifests). */
 export function writeStatus(reports: IngestReport[]): void {
@@ -103,7 +103,7 @@ export function writeStatus(reports: IngestReport[]): void {
       error: r.error,
     };
   }
-  mkdirSync(resolve(process.cwd(), "intelligence", "_core", "manifests"), { recursive: true });
+  mkdirSync(corePath("manifests"), { recursive: true });
   writeFileSync(STATUS_PATH, JSON.stringify({ lastRun: new Date().toISOString(), domains }, null, 2));
 }
 

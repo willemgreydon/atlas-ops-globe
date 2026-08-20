@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T15:25:58.601Z",
+  "generatedAt": "2026-08-20T16:18:26.485Z",
   "sources": [
     {
       "id": "naturalearth",
@@ -335,6 +335,34 @@
         "concurrency": 2,
         "maxRetries": 3
       }
+    },
+    {
+      "id": "marinetraffic",
+      "name": "MarineTraffic AIS Data API (Kpler)",
+      "domains": [
+        "maritime"
+      ],
+      "type": "api",
+      "baseUrl": "https://services.marinetraffic.com/api",
+      "auth": "api-key",
+      "polling": true,
+      "license": "Property of Kpler — credit-metered, redistribution restricted",
+      "commercialUse": "restricted",
+      "redistribution": "restricted",
+      "attributionRequired": true,
+      "attribution": "MarineTraffic",
+      "enabled": false,
+      "status": "credential-required",
+      "envKeys": [
+        "MARINETRAFFIC_API_KEY"
+      ],
+      "acquisition": {
+        "minIntervalSec": 2,
+        "cacheTtlSec": 60,
+        "concurrency": 1,
+        "maxRetries": 3
+      },
+      "notes": "40-char hex api_key in URL path. Adapter wired: exportvessels (PS07 bbox) → vessels + chokepoint scan; endpoints also cover exportvessel, exportvesseltrack, portcalls, port-congestion, shipsearch. Credit-metered per call."
     },
     {
       "id": "ourairports",

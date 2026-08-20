@@ -2,6 +2,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { getDb } from "./db";
 import { count } from "./repositories";
+import { domainPath } from "./paths";
 
 /**
  * Global intelligence product: an aggregated snapshot across domains. Metrics
@@ -69,7 +70,7 @@ export function buildGlobalSnapshot(): GlobalSnapshot {
 
 export function writeGlobalSnapshot(): GlobalSnapshot {
   const snap = buildGlobalSnapshot();
-  const dir = resolve(process.cwd(), "intelligence", "global", "snapshots");
+  const dir = domainPath("global", "snapshots");
   mkdirSync(dir, { recursive: true });
   writeFileSync(resolve(dir, "latest.json"), JSON.stringify(snap, null, 2));
   const stamp = snap.generatedAt.replace(/[:.]/g, "").slice(0, 15) + "Z";

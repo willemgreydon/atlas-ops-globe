@@ -69,7 +69,7 @@ docs/              architecture, providers, data model, roadmap, security, licen
 ```
 
 See [`docs/`](docs) for the full engineering documentation, including the ADR
-log in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+log in [`docs/DECISIONS.md`](docs/07-decisions/README.md).
 
 ## Intelligence Vault
 
@@ -99,7 +99,7 @@ pnpm intel:validate    # DB integrity + migrations
   filters, reading from SQLite.
 
 See [`intelligence/README.md`](intelligence/README.md) and
-[`docs/intelligence/`](docs/intelligence) (API catalog, source matrix, coverage gaps).
+[`docs/08-intelligence/`](docs/08-intelligence) (API catalog, source matrix, coverage gaps).
 
 ## Production direction
 
@@ -107,4 +107,4 @@ The local build uses in-memory caching and a mock-fallback layer. The interfaces
 (`CacheStore`, `ProviderDefinition`, `ProviderResult`) are designed so the same
 call sites can later be backed by Redis, Postgres/PostGIS, a queue and an
 SSE/WebSocket delta channel without touching rendering code. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).
+[`docs/01-architecture/`](docs/01-architecture/README.md) and [`docs/06-roadmap/`](docs/06-roadmap/README.md).

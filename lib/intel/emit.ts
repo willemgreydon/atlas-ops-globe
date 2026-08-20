@@ -1,15 +1,15 @@
 import { writeFileSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
 import { ontology } from "./ontology";
 import { SOURCES } from "./sources";
 import { getDb } from "./db";
+import { corePath } from "./paths";
 
 /**
  * Emit machine-readable _core artifacts (ontology, source registry) and a few
  * lightweight JSON indexes derived from the DB. Large indexes belong in SQLite,
  * not giant JSON — these are small summaries for humans and quick tooling.
  */
-const core = (...p: string[]) => resolve(process.cwd(), "intelligence", "_core", ...p);
+const core = (...p: string[]) => corePath(...p);
 
 export function emitCoreArtifacts(): void {
   mkdirSync(core("ontology"), { recursive: true });

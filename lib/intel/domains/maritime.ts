@@ -1,6 +1,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fetchVesselsInBounds, marineTrafficConfigured } from "../providers/marinetraffic";
+import { domainPath } from "../paths";
 import { CHOKEPOINTS } from "../geo/chokepoints";
 import { mapPool, limiter } from "../pool";
 import { runIngestor, type IngestReport } from "../ingest";
@@ -41,7 +42,7 @@ export async function ingestMaritime(): Promise<IngestReport> {
     });
 
     // Persist chokepoint transit snapshot (gitignored).
-    const dir = resolve(process.cwd(), "intelligence", "maritime", "snapshots");
+    const dir = domainPath("maritime", "snapshots");
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       resolve(dir, "chokepoints-latest.json"),
