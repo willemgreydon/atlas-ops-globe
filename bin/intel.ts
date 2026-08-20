@@ -13,6 +13,7 @@
  *
  * Flags: --query <q> --group <g> --limit <n>
  */
+import "./load-env"; // must be first: loads .env.local before any module reads env
 import { getDb, closeDb } from "@/lib/intel/db";
 import { LATEST_MIGRATION } from "@/lib/intel/migrations";
 import { tableCounts } from "@/lib/intel/repositories";
