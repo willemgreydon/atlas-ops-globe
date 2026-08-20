@@ -1,8 +1,10 @@
 {
   "domain": "maritime",
-  "status": "scaffolded",
-  "sources": ["aisstream"],
-  "canonicalEntities": ["Vessel", "Voyage", "Port"],
+  "status": "implemented-credential-required",
+  "sources": ["marinetraffic", "aisstream"],
+  "canonicalEntities": ["Vessel", "Voyage", "Port", "Chokepoint"],
   "storage": ["vessels", "ports", "provenance"],
+  "chokepoints": 9,
+  "note": "MarineTraffic adapter wired; OFFLINE until MARINETRAFFIC_API_KEY is set.",
   "updatedAt": "2026-08-20"
 }

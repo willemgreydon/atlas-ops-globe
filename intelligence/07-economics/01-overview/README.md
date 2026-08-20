@@ -1,35 +1,58 @@
-# economics
+# 07 · Economics Intelligence — Overview
 
-**Status: Implemented**
+**Status:** IMPLEMENTED (live ingestor; one source wired).
 
-## Purpose
-Country-level macroeconomic indicators as time series, used for country
-profiles and cross-domain economic context.
+## Mission
 
-## Current sources
-- **World Bank Indicators** (`worldbank`) — annual indicator series for a seed
-  set of 25 countries (G20 + strategically-watched economies). ~125
-  observations.
+Give every watched country a slow-moving macroeconomic baseline — population,
+output, prices, labour — as a provenance-labelled time series. Economics is
+cross-domain context: it powers country profiles and lets other domains
+(conflict, sanctions, markets) read a country's economic footprint.
 
-## Canonical entities
-- `EconomicIndicator` / `EconomicEvent` (see `VaultEconomicObs`).
+## At a glance
 
-## Update frequency
-- On sync. min interval 1s, concurrency 4, cache TTL 1 day. Included in
-  `pnpm intel:update`.
+| Aspect | Value |
+|---|---|
+| Source | `worldbank` (World Bank Indicators API) — IMPLEMENTED |
+| Seed set | 25 countries (`SEED_COUNTRIES`, G20 + watched) |
+| Indicators | 5 per country (pop, GDP, GDP/cap, inflation, unemployment) |
+| Expected rows | ~125 observations (25 × 5, minus null/no-year) |
+| Entities | EconomicIndicator / EconomicObservation |
+| Schema | `VaultEconomicObs` (`lib/intel/schemas.ts`) |
+| Table | `economic_observations` |
+| ID | `IdOf.indicatorObs` → `econobs:CC:INDICATOR:PERIOD` |
+| CLI | `pnpm intel:sync economics` |
+| API | joined into `GET /api/intelligence/countries/[code]` |
+| Ingestor | `lib/intel/domains/economics.ts` → `ingestEconomics()` |
+| Provider | `lib/providers/worldbank.ts` → `fetchCountryProfile()` |
 
-## Storage
-- `economic_observations` table; `provenance` rows. IDs via
-  `IdOf.indicatorObs(country, indicator, period)`.
+## Indicators fetched (`worldbank.ts` INDICATORS)
 
-## Known limitations
-- Only **25 seed countries**; ~170 countries have no observations.
-- Annual frequency only; no quarterly/monthly or market data.
-- Skips observations with null value or missing year.
+| Code | Label | Unit |
+|---|---|---|
+| `SP.POP.TOTL` | Population | — |
+| `NY.GDP.MKTP.CD` | GDP | US$ |
+| `NY.GDP.PCAP.CD` | GDP per capita | US$ |
+| `FP.CPI.TOTL.ZG` | Inflation | % |
+| `SL.UEM.TOTL.ZS` | Unemployment | % |
 
-## Licensing considerations
-- CC BY 4.0 — commercial use and redistribution allowed; attribution required
-  ("World Bank Open Data (CC BY 4.0)").
+Each is fetched with `mrnev=1` (most-recent non-empty value) → annual latest.
 
-## Next sources
-- Additional countries; IMF/OECD series; higher-frequency indicators.
+## Pipeline shape
+
+`World Bank Indicators API → fetchCountryProfile (Zod, [meta, data] tuples) →
+mapPool(4) + limiter(250ms) → upsertEconomicObs → economic_observations`.
+
+## Key gap
+
+Only **25 seed countries** and **annual frequency**; ~170 countries have no
+observations, and there is no quarterly/monthly or market data. See §07.
+
+## Contents
+
+- [02 · Sources](../02-sources/README.md) — World Bank dossier
+- [03 · Entities](../03-entities/README.md) — observation entity + IDs
+- [04 · Schemas](../04-schemas/README.md) — `VaultEconomicObs` + example
+- [05 · Pipeline](../05-pipeline/README.md) — stages, concurrency, tables
+- [06 · Relationships](../06-relationships/README.md) — country linkage
+- [07 · Analysis & Gaps](../07-analysis-and-gaps/README.md) — metrics, SQL, gaps

@@ -1,35 +1,48 @@
-# disasters
+# 13 — Disasters (Overview)
 
-**Status: Implemented**
+**Status: IMPLEMENTED**
 
-## Purpose
+## Mission
+
 Natural-hazard situational awareness: earthquakes and NASA-tracked natural
-events, normalized into canonical disaster events with country resolution.
+events, normalized into canonical disaster events with country resolution and
+severity scoring. Spatial by nature — every event carries a lat/lon and, where
+possible, a country link.
 
-## Current sources
-- **USGS Earthquakes** (`usgs`) — earthquake GeoJSON feed.
-- **NASA EONET** (`eonet`) — wildfires, storms, volcanoes, and other natural
-  events. ~123 events total across both providers.
+## At a glance
 
-## Canonical entities
-- `DisasterEvent` / `Event` (see `VaultEvent`, `kind = "disaster"`).
+| Property | Value |
+|---|---|
+| Sources | `usgs` (earthquakes M4.5+/day, GeoJSON), `eonet` (NASA open natural events) |
+| Ingestor | `lib/intel/domains/disasters.ts` (`ingestDisasters`) |
+| Providers | `lib/providers/usgs.ts`, `lib/providers/eonet.ts` |
+| Primary entity | `DisasterEvent` / `Event` (`kind = "disaster"`) |
+| Schema | `VaultEvent` (`lib/intel/schemas.ts`) |
+| SQLite tables written | `events` (kind=`disaster`), `relationships`, `provenance` |
+| CLI | `pnpm intel:sync disasters` |
+| API | `GET /api/intelligence/disasters`, `GET /api/intelligence/events?kind=disaster` |
+| Approx count | ~123 events across both providers |
 
-## Update frequency
-- Polling. USGS min interval 30s (cache 60s); EONET cache 300s. Included in
-  `pnpm intel:update`.
+## How it works (short)
 
-## Storage
-- `events` table (`kind = "disaster"`); country links in `relationships` with
-  basis `reported` or `spatially-near`; `provenance` rows.
+`ingestDisasters` fetches USGS earthquakes and EONET events in parallel
+(`Promise.allSettled` — one provider failing does not sink the other), validates
+each against a source Zod schema, maps to `VaultEvent`, derives severity from
+magnitude, resolves the country (reported code or nearest centroid), stores to
+`events`, and links `event → country` in `relationships`.
 
 ## Known limitations
+
 - Events without a reported country are attributed by nearest centroid
-  (`spatially-near`), imprecise near borders/coasts.
-- Coverage limited to what USGS + EONET report; no humanitarian impact context.
+  (`spatially-near` basis) — imprecise near borders/coasts.
+- USGS feed is M4.5+ over the last 24h; EONET is open events (limit 100). No
+  humanitarian impact/casualty context (that would come from ReliefWeb, `next`).
 
-## Licensing considerations
-- Both US Gov / NASA open data — commercial use and redistribution allowed;
-  attribution required ("U.S. Geological Survey", "NASA EONET").
+## Contents
 
-## Next sources
-- **ReliefWeb** (`reliefweb`, `next`) for humanitarian situation reports.
+- [02 — Sources](../02-sources/README.md)
+- [03 — Entities](../03-entities/README.md)
+- [04 — Schemas](../04-schemas/README.md)
+- [05 — Pipeline](../05-pipeline/README.md)
+- [06 — Relationships](../06-relationships/README.md)
+- [07 — Analysis & Gaps](../07-analysis-and-gaps/README.md)

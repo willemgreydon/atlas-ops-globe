@@ -1,37 +1,42 @@
-# aviation
+# 03 — Aviation
 
-**Status: Implemented (snapshot-only)**
+**Mission.** Provide a live, honest snapshot of airborne aircraft positions
+(ADS-B) as the aviation layer of the Intelligence Vault, and hold the canonical
+entity model (Aircraft, Flight, Airport, Airline) for future enrichment.
 
-## Purpose
-Live aircraft situational awareness: a latest-position snapshot of airborne
-aircraft. Reference airport data is planned.
+## Status: IMPLEMENTED (snapshot-only)
 
-## Current sources
-- **OpenSky Network** (`opensky`) — live state-vector snapshot, on-demand.
-  Stores only the latest position per aircraft (upsert), bounded by `--limit`
-  (default 2000). Gitignored, not committed.
-- **OurAirports** (`ourairports`, `next`) — ~78k airport reference CSV;
-  adapter present but **not loaded** this cycle.
+The aviation ingestor is wired and runs live against OpenSky. It is deliberately
+**snapshot-only**: it stores the latest position per aircraft (upsert), bounded
+to ~2000 rows, in the **gitignored** SQLite DB. There are no historical
+trajectories, no downsampling, and no airport reference loaded yet.
 
-## Canonical entities
-- `Aircraft`, `Flight`, `Airport`, `Airline` (aircraft populated; airports
-  planned).
+| Aspect | Value |
+|---|---|
+| Live source | `opensky` (OpenSky Network, ADS-B live states) — IMPLEMENTED |
+| Planned source | `ourairports` (~78k airport reference) — status **NEXT** (not loaded) |
+| Auth | anonymous today; optional `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET` for higher limits |
+| Canonical entities | Aircraft, Flight, Airport, Airline |
+| SQLite tables | `aircraft` (populated, snapshot), `airports` (schema only, empty) |
+| Universal ID | `aircraft:icao24-<hex>` (lowercased) |
+| CLI | `pnpm intel:sync aviation` |
+| Bound | latest position per aircraft, capped at `limit` (default **2000**) |
+| Persistence | gitignored DB — counts are only as fresh as the last local sync |
 
-## Update frequency
-- On-demand snapshot. min interval 10s, cache TTL 10s. Not part of the default
-  bootstrap/update order; run via `pnpm intel:sync aviation`.
+### At a glance
 
-## Storage
-- `aircraft` table (snapshot upsert). `airports` schema exists but is empty.
+- **`aircraft` table:** populated on each `sync aviation` run, one row per
+  `icao24`, position overwritten on conflict (upsert).
+- **`airports` table:** schema exists (migration v1) but is **unpopulated** —
+  `ourairports` is not bulk-loaded this cycle (status NEXT).
+- **Flight / Airline:** ontology types only; no flight or airline records are
+  ingested today (PLANNED).
 
-## Known limitations
-- Snapshot-only — no historical trajectories or downsampling.
-- Airport reference not loaded; `airports` table empty.
+## Contents
 
-## Licensing considerations
-- OpenSky non-commercial/research — commercial use and redistribution
-  **restricted**; attribution required ("The OpenSky Network").
-- OurAirports is public domain.
-
-## Next sources
-- Load OurAirports airport reference; historical trajectory storage.
+- [02-sources](../02-sources/README.md) — OpenSky (live) + OurAirports (planned) dossiers
+- [03-entities](../03-entities/README.md) — Aircraft, Flight, Airport, Airline + universal IDs
+- [04-schemas](../04-schemas/README.md) — normalized record shape + example
+- [05-pipeline](../05-pipeline/README.md) — snapshot pipeline, CLI, cadence, `aircraft` columns
+- [06-relationships](../06-relationships/README.md) — cross-domain edges (conservative)
+- [07-analysis-and-gaps](../07-analysis-and-gaps/README.md) — metrics, queries, gaps

@@ -35,16 +35,29 @@ SOURCE ──► NORMALIZED ──► ENRICHED ──► RELATIONSHIPS ──►
 
 ## Folder layout
 
+Domains are numerically ordered (`01-global` … `16-space`); the logical domain
+KEY used in code (`global`, `maritime`, …) maps to its folder via
+`lib/intel/paths.ts` (`DOMAIN_DIR`). Every domain is enriched with **7 numbered
+sub-sub-folders** holding comprehensive intelligence:
+
 ```
 intelligence/
-  _core/            ontology, schemas, source registry, geography, indexes, manifests
-  <domain>/         one folder per intelligence domain (README + manifest.json)
-    raw/            raw provider snapshots (gitignored)
-    snapshots/      generated snapshots (gitignored)
-lib/intel/          the executable pipeline (ingestors, storage, queries, CLI logic)
-bin/intel.ts        CLI entrypoint
-app/api/intelligence/  read-only HTTP endpoints
-data/intelligence.db   SQLite store (gitignored)
+  _core/                   ontology, schemas, source registry, geography, indexes, manifests
+  NN-<domain>/             one folder per domain (numbered 01..16)
+    manifest.json          machine-readable domain descriptor
+    01-overview/           mission, status, at-a-glance, contents
+    02-sources/            per-source dossiers (endpoint, auth, rate, licensing)
+    03-entities/           canonical entities + universal IDs
+    04-schemas/            normalized Zod record shapes + example records
+    05-pipeline/           ingestion → validation → normalization → storage
+    06-relationships/      cross-domain edges (typed, with basis)
+    07-analysis-and-gaps/  derived metrics, example queries, coverage gaps
+    raw/                   raw provider snapshots (gitignored)
+    snapshots/             generated snapshots (gitignored)
+lib/intel/                 the executable pipeline (ingestors, storage, queries, CLI)
+bin/intel.ts               CLI entrypoint
+app/api/intelligence/      read-only HTTP endpoints
+data/intelligence.db       SQLite store (gitignored)
 ```
 
 Committed: schemas, ontology, source registry, per-domain READMEs and
@@ -92,8 +105,8 @@ Bootstrap order: `countries → disasters → economics → cyber → space → 
 | space | Implemented | CelesTrak OMM, capped 2000 of ~16399 objects |
 | aviation | Implemented | OpenSky snapshot, on-demand |
 | news | Implemented | GDELT DOC 2.0 (rate-limited; may degrade live) |
+| maritime | Implemented (credential) | MarineTraffic adapter wired; OFFLINE until `MARINETRAFFIC_API_KEY` is set |
 | conflict | Scaffolded | Planned: ReliefWeb, ACLED (credential) |
-| maritime | Scaffolded | Planned: AISstream (credential) |
 | politics | Scaffolded | Planned: Wikidata enrichment |
 | markets | Scaffolded | No source wired |
 | energy | Scaffolded | No source wired |
@@ -102,6 +115,7 @@ Bootstrap order: `countries → disasters → economics → cyber → space → 
 | weather | Scaffolded | Planned: Open-Meteo |
 | sanctions | Scaffolded | Planned: OFAC (not wired) |
 
-See `docs/intelligence/SOURCE-MATRIX.md` for the full acquisition map,
-`docs/intelligence/API-CATALOG.md` for per-source detail, and
-`docs/intelligence/COVERAGE-GAPS.md` for honest blind spots.
+Each domain's `01-overview/README.md` links to its own 02–07 sub-sub-folders.
+For cross-cutting references see `docs/08-intelligence/source-matrix.md` (full
+acquisition map), `docs/08-intelligence/api-catalog.md` (per-source detail), and
+`docs/08-intelligence/coverage-gaps.md` (honest blind spots).
