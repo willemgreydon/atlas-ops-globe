@@ -200,3 +200,20 @@ export const VaultWeatherObs = z.object({
   provenance: z.array(VaultProvenance).default([]),
 });
 export type VaultWeatherObs = z.infer<typeof VaultWeatherObs>;
+
+export const VaultMarketObs = z.object({
+  id: z.string(),
+  symbol: z.string(),
+  name: z.string().optional(),
+  assetClass: z.enum(["index", "equity", "fx", "commodity", "crypto", "rate", "bond"]),
+  price: z.number().nullable(),
+  change: z.number().nullable().optional(),
+  changePct: z.number().nullable().optional(),
+  currency: z.string().optional(),
+  /** Honesty: never show delayed data as realtime. */
+  latencyClass: z.enum(["realtime", "delayed", "eod", "historical"]),
+  ts: z.string(),
+  provider: z.string(),
+  provenance: z.array(VaultProvenance).default([]),
+});
+export type VaultMarketObs = z.infer<typeof VaultMarketObs>;

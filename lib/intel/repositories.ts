@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "./db";
 import type {
-  VaultCountry, VaultEconomicObs, VaultEntity, VaultEvent, VaultNews,
+  VaultCountry, VaultEconomicObs, VaultEntity, VaultEvent, VaultMarketObs, VaultNews,
   VaultProvenance, VaultRelationship, VaultSpaceObject, VaultVessel, VaultVulnerability,
   VaultWeatherObs,
 } from "./schemas";
@@ -190,6 +190,19 @@ export function upsertWeatherObs(o: VaultWeatherObs, db = getDb()): void {
        unit=excluded.unit, provenance=excluded.provenance`,
   ).run(o.id, o.lat, o.lon, o.place ?? null, o.countryCode ?? null, o.observedAt, o.variable,
     o.value ?? null, o.unit ?? null, o.provider, J(o.provenance));
+}
+
+// --------------------------------------------------------------------------
+// Markets
+// --------------------------------------------------------------------------
+export function upsertMarketObs(o: VaultMarketObs, db = getDb()): void {
+  db.prepare(
+    `INSERT INTO market_observations (id, symbol, name, asset_class, ts, value, change, change_pct, currency, latency_class, provider, provenance)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET ts=excluded.ts, value=excluded.value, change=excluded.change,
+       change_pct=excluded.change_pct, latency_class=excluded.latency_class, provenance=excluded.provenance`,
+  ).run(o.id, o.symbol, o.name ?? null, o.assetClass, o.ts, o.price ?? null, o.change ?? null,
+    o.changePct ?? null, o.currency ?? null, o.latencyClass, o.provider, J(o.provenance));
 }
 
 // --------------------------------------------------------------------------

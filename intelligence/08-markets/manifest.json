@@ -1,8 +1,9 @@
 {
   "domain": "markets",
-  "status": "scaffolded",
-  "sources": [],
+  "status": "implemented-credential-required",
+  "sources": ["finnhub"],
   "canonicalEntities": ["MarketInstrument", "MarketObservation"],
   "storage": ["market_observations", "provenance"],
+  "note": "Live via Finnhub (free key). Index quotes use ETF proxies (SPY/QQQ/DIA). Honest latency_class; OFFLINE without FINNHUB_API_KEY.",
   "updatedAt": "2026-08-20"
 }

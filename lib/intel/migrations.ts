@@ -171,6 +171,16 @@ const MIGRATIONS: Migration[] = [
     CREATE INDEX idx_weather_variable ON weather_observations(variable);
     `,
   },
+  {
+    id: 4,
+    name: "market-fields",
+    up: `
+    ALTER TABLE market_observations ADD COLUMN name TEXT;
+    ALTER TABLE market_observations ADD COLUMN change REAL;
+    ALTER TABLE market_observations ADD COLUMN change_pct REAL;
+    CREATE INDEX idx_market_class ON market_observations(asset_class);
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): number {

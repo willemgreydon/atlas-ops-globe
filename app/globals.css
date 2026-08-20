@@ -196,8 +196,12 @@ button.mini-row:hover { background: rgba(255, 255, 255, 0.04); }
 .ticker-track::-webkit-scrollbar { display: none; }
 .ticker-item { display: inline-flex; align-items: center; gap: 8px; }
 .ticker-tag { font: 700 9px/1 var(--mono); letter-spacing: 0.06em; }
-.tag-critical { color: var(--critical); } .tag-warning { color: var(--warning); } .tag-event { color: var(--accent); } .tag-news { color: var(--info); }
+.tag-critical { color: var(--critical); } .tag-warning { color: var(--warning); } .tag-event { color: var(--accent); } .tag-news { color: var(--info); } .tag-markets { color: #ffd166; }
 .ticker-sources { color: var(--muted-2); font: 700 9.5px/1 var(--mono); letter-spacing: 0.05em; margin-left: auto; }
+.quote { display: inline-flex; align-items: center; gap: 5px; font: 700 11px/1 var(--mono); }
+.quote b { color: #e4e9f0; } .quote-px { color: var(--muted); }
+.quote .up { color: var(--accent); } .quote .down { color: #ff6872; }
+.ticker-divider { width: 1px; height: 14px; background: var(--line-strong); display: inline-block; }
 
 /* =========================================================================
    Command palette

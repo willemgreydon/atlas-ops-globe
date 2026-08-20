@@ -181,6 +181,15 @@ export const SOURCES: SourceRecord[] = [
     notes: "Current weather for major cities (point observations). Wired for the weather domain.",
   },
   {
+    id: "finnhub", name: "Finnhub", domains: ["markets"], type: "api",
+    baseUrl: "https://finnhub.io/api/v1/", auth: "api-key", polling: true,
+    license: "Finnhub terms", commercialUse: "review-required", redistribution: "restricted",
+    attributionRequired: true, attribution: "Finnhub", enabled: true, status: "implemented",
+    envKeys: ["FINNHUB_API_KEY"],
+    acquisition: A({ minIntervalSec: 1, cacheTtlSec: 30, concurrency: 4 }),
+    notes: "Free tier 60 req/min, real-time US equities/ETFs. Index quotes via ETF proxies (SPY/QQQ/DIA).",
+  },
+  {
     id: "ofac", name: "OFAC Sanctions List Service", domains: ["sanctions"], type: "bulk",
     baseUrl: "https://sanctionslist.ofac.treas.gov/", auth: "none", polling: true,
     license: "US Government open data", commercialUse: "allowed", redistribution: "allowed",

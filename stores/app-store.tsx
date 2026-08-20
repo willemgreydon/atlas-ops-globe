@@ -43,6 +43,21 @@ export interface VesselRow {
   lastContact: string;
 }
 
+/** Market quote from /api/intelligence/markets (Finnhub). */
+export interface MarketRow {
+  id: string;
+  symbol: string;
+  name?: string;
+  assetClass: string;
+  price: number | null;
+  change?: number | null;
+  changePct?: number | null;
+  currency?: string;
+  latencyClass: string;
+  ts: string;
+  provider: string;
+}
+
 /** Aggregated vault snapshot from /api/intelligence/global. */
 export interface VaultSnapshot {
   generatedAt: string;
@@ -86,6 +101,8 @@ interface AppState {
   vessels: Feed<VesselRow>;
   /** Weather observation points from the vault (Open-Meteo). */
   weather: Feed<WeatherRow>;
+  /** Market quotes from the vault (Finnhub); drives the ticker. */
+  markets: Feed<MarketRow>;
   /** Aggregated vault snapshot (SQLite-backed), or null while loading. */
   vault: VaultSnapshot | null;
   /** Fly-to request consumed by the globe; bumped on each navigation. */
@@ -95,7 +112,7 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
-const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, weather: 600_000, vault: 60_000 } as const;
+const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, weather: 600_000, markets: 30_000, vault: 60_000 } as const;
 
 function defaultLayerVisibility(mode: ModeId): Record<LayerId, boolean> {
   const on = new Set(MODE_BY_ID[mode].defaultLayers);
@@ -211,6 +228,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Vault-backed vessels (MarineTraffic via the intelligence API).
   const vessels = useFeed<VesselRow>("/api/intelligence/maritime?limit=500", POLL_MS.vessels, layers.maritime);
   const weather = useFeed<WeatherRow>("/api/intelligence/weather?limit=200", POLL_MS.weather, layers.weather);
+  // Markets drive the always-visible ticker, so poll regardless of layers.
+  const markets = useFeed<MarketRow>("/api/intelligence/markets?limit=20", POLL_MS.markets, true);
   const vault = useVaultSnapshot();
 
   const value = useMemo<AppState>(
@@ -228,11 +247,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       news,
       vessels,
       weather,
+      markets,
       vault,
       flyTo,
       requestFlyTo,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, weather, vault, flyTo, requestFlyTo],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, weather, markets, vault, flyTo, requestFlyTo],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

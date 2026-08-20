@@ -113,6 +113,16 @@ export function listCountries(p: PageParams): Page<Record<string, unknown>> {
   return page(rows, p);
 }
 
+export function listMarkets(p: PageParams): Page<Record<string, unknown>> {
+  // Indices first, then equities — a stable ticker order.
+  const rows = getDb().prepare(
+    `SELECT id, symbol, name, asset_class AS assetClass, value AS price, change, change_pct AS changePct,
+       currency, latency_class AS latencyClass, ts, provider FROM market_observations
+     ORDER BY CASE asset_class WHEN 'index' THEN 0 WHEN 'equity' THEN 1 ELSE 2 END, symbol LIMIT ? OFFSET ?`,
+  ).all(p.limit, p.offset) as Record<string, unknown>[];
+  return page(rows, p);
+}
+
 export function listWeather(p: PageParams, f: { variable?: string; bbox?: [number, number, number, number] | null } = {}): Page<Record<string, unknown>> {
   const where: string[] = ["variable = ?"];
   // Default to temperature so there's one marker per city, not one per variable.
