@@ -14,8 +14,10 @@ export default function VaultPanel() {
     ["Countries", v?.counts.countries],
     ["Events", v?.counts.events],
     ["Vulnerabilities", v?.counts.vulnerabilities],
-    ["KEV", v?.counts.kev],
     ["Satellites", v?.counts.spaceObjects],
+    ["Sanctions", v?.counts.sanctions],
+    ["Persons", v?.counts.persons],
+    ["Organizations", v?.counts.organizations],
     ["Relationships", v?.counts.relationships],
   ];
 

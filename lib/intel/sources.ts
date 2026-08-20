@@ -220,10 +220,12 @@ export const SOURCES: SourceRecord[] = [
     notes: "Free tier 60 req/min, real-time US equities/ETFs. Index quotes via ETF proxies (SPY/QQQ/DIA).",
   },
   {
-    id: "ofac", name: "OFAC Sanctions List Service", domains: ["sanctions"], type: "bulk",
-    baseUrl: "https://sanctionslist.ofac.treas.gov/", auth: "none", polling: true,
+    id: "ofac", name: "OFAC Specially Designated Nationals (SDN)", domains: ["sanctions"], type: "bulk",
+    baseUrl: "https://www.treasury.gov/ofac/downloads/sdn.csv", auth: "none", polling: true,
     license: "US Government open data", commercialUse: "allowed", redistribution: "allowed",
-    attributionRequired: false, enabled: false, status: "next", acquisition: A({ cacheTtlSec: 86400 }),
+    attributionRequired: true, attribution: "U.S. Treasury OFAC", enabled: true, status: "implemented",
+    acquisition: A({ minIntervalSec: 60, cacheTtlSec: 86400 }),
+    notes: "SDN list as a reference dataset — NOT a matching engine. Non-spatial. CLI: pnpm intel:sync sanctions.",
   },
 ];
 

@@ -25,6 +25,9 @@ export interface GlobalSnapshot {
     spaceObjects: number;
     aircraftSnapshot: number;
     relationships: number;
+    persons: number;
+    organizations: number;
+    sanctions: number;
   };
   markets: null;
   maritime: null;
@@ -61,6 +64,9 @@ export function buildGlobalSnapshot(): GlobalSnapshot {
       spaceObjects: count("space_objects"),
       aircraftSnapshot: count("aircraft"),
       relationships: count("relationships"),
+      persons: count("persons"),
+      organizations: count("organizations"),
+      sanctions: count("sanctions"),
     },
     markets: null, // no market feed wired yet — explicitly unavailable
     maritime: null, // no AIS provider wired yet

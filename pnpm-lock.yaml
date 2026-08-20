@@ -36,8 +36,8 @@ importers:
         specifier: ^1.18.2
         version: 1.25.0(cesium@1.144.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       satellite.js:
-        specifier: ^7.1.0
-        version: 7.1.0
+        specifier: ^5.0.0
+        version: 5.0.0
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -2858,8 +2858,8 @@ packages:
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
 
-  satellite.js@7.1.0:
-    resolution: {integrity: sha512-U6nRml9Nb7dV9LJPiMNPyna7U7ry+1nXYkOeCEG7K/YbojQQLHHmcjPisp03VNY+HLcbQHqbt7t4t1vQMaKCLQ==}
+  satellite.js@5.0.0:
+    resolution: {integrity: sha512-ie3yiJ2LJAJIhVUKdYhgp7V0btXKAMImDjRnuaNfJGl8rjwP2HwVIh4HLFcpiXYEiYwXc5fqh5+yZqCe6KIwWw==}
 
   saxes@6.0.0:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
@@ -6851,7 +6851,7 @@ snapshots:
 
   safer-buffer@2.1.2: {}
 
-  satellite.js@7.1.0: {}
+  satellite.js@5.0.0: {}
 
   saxes@6.0.0:
     dependencies:

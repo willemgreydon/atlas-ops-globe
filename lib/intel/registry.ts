@@ -10,6 +10,7 @@ import { ingestMaritime } from "./domains/maritime";
 import { ingestWeather } from "./domains/weather";
 import { ingestMarkets } from "./domains/markets";
 import { ingestConflict } from "./domains/conflict";
+import { ingestSanctions } from "./domains/sanctions";
 
 export interface IngestOpts {
   query?: string;
@@ -29,11 +30,12 @@ export const INGESTORS: Record<string, (o: IngestOpts) => Promise<IngestReport>>
   weather: () => ingestWeather(),
   markets: () => ingestMarkets(),
   conflict: (o) => ingestConflict({ limit: o.limit }),
+  sanctions: () => ingestSanctions(),
   news: (o) => ingestNews(o.query),
 };
 
 /** Bootstrap order: cheap/offline first, rate-limited news last. */
-export const BOOTSTRAP_ORDER = ["countries", "disasters", "economics", "cyber", "space", "weather", "markets", "news"];
+export const BOOTSTRAP_ORDER = ["countries", "disasters", "economics", "cyber", "space", "weather", "markets", "sanctions", "news"];
 
 /** Incremental update set (skips the one-off country seed). */
 export const UPDATE_ORDER = ["disasters", "economics", "cyber", "space", "weather", "markets", "news"];

@@ -1,8 +1,9 @@
 {
   "domain": "sanctions",
-  "status": "scaffolded",
+  "status": "implemented",
   "sources": ["ofac"],
-  "canonicalEntities": ["Sanction"],
+  "canonicalEntities": ["Sanction", "Person", "Organization", "Vessel", "Aircraft"],
   "storage": ["sanctions", "provenance"],
+  "note": "OFAC SDN list as a reference dataset — NOT a matching engine. Never assert sanctioned status by name similarity; downstream matching must use hard identifiers (IMO/MMSI/registration/LEI). Non-spatial.",
   "updatedAt": "2026-08-20"
 }

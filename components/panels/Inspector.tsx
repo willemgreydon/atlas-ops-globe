@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import * as satellite from "satellite.js";
+import { loadSgp4, subpoint } from "@/lib/sgp4-client";
 import { useApp, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { operatorFromCallsign } from "@/data/airlines-icao";
 import StatusBadge from "@/components/common/StatusBadge";
@@ -216,21 +216,16 @@ function WeatherView({ w }: { w: WeatherRow }) {
   );
 }
 
-function currentSubpoint(s: SatelliteRow): { lat: number; lon: number; altKm: number } | null {
-  if (!s.tle1 || !s.tle2) return null;
-  try {
-    const rec = satellite.twoline2satrec(s.tle1, s.tle2);
-    const now = new Date();
-    const pv = satellite.propagate(rec, now);
-    if (!pv || typeof pv.position === "boolean" || !pv.position) return null;
-    const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(now));
-    return { lat: satellite.degreesLat(geo.latitude), lon: satellite.degreesLong(geo.longitude), altKm: geo.height };
-  } catch { return null; }
-}
-
 function SatelliteView({ s }: { s: SatelliteRow }) {
   const app = useApp();
-  const sub = currentSubpoint(s);
+  const [sub, setSub] = useState<{ lat: number; lon: number; altKm: number } | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (s.tle1 && s.tle2) {
+      loadSgp4().then((sat) => { if (live) setSub(subpoint(sat, s.tle1!, s.tle2!)); });
+    }
+    return () => { live = false; };
+  }, [s.tle1, s.tle2]);
   const regime = s.periodMin == null ? "—" : s.periodMin < 128 ? "LEO" : s.periodMin < 800 ? "MEO" : "GEO/HEO";
   return (
     <>

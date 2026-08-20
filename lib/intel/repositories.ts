@@ -2,8 +2,8 @@ import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "./db";
 import type {
   VaultCountry, VaultEconomicObs, VaultEntity, VaultEvent, VaultMarketObs, VaultNews,
-  VaultOrganization, VaultPerson, VaultProvenance, VaultRelationship, VaultSpaceObject,
-  VaultVessel, VaultVulnerability, VaultWeatherObs,
+  VaultOrganization, VaultPerson, VaultProvenance, VaultRelationship, VaultSanction,
+  VaultSpaceObject, VaultVessel, VaultVulnerability, VaultWeatherObs,
 } from "./schemas";
 
 /**
@@ -206,6 +206,20 @@ export function upsertVessel(v: VaultVessel, db = getDb()): void {
     v.lat, v.lon, v.speedKn ?? null, v.courseDeg ?? null, v.navigationStatus ?? null,
     v.destination ?? null, v.eta ?? null, v.lastContact, J(v.provenance), now());
   if (v.provenance?.length) insertProvenance(db, v.id, v.provenance);
+}
+
+// --------------------------------------------------------------------------
+// Sanctions
+// --------------------------------------------------------------------------
+export function upsertSanction(s: VaultSanction, db = getDb()): void {
+  db.prepare(
+    `INSERT INTO sanctions (id, subject_type, subject_id, name, aliases, program, authority, jurisdiction, listed_at, updated_at, identifiers, source, provenance)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET name=excluded.name, aliases=excluded.aliases, program=excluded.program,
+       identifiers=excluded.identifiers, updated_at=excluded.updated_at, provenance=excluded.provenance`,
+  ).run(s.id, s.subjectType, null, s.name, J(s.aliases), s.program ?? null, s.authority,
+    s.jurisdiction ?? null, s.listedAt ?? null, now(), J({ ...s.identifiers, remarks: s.remarks }),
+    s.source, J(s.provenance));
 }
 
 // --------------------------------------------------------------------------

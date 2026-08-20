@@ -194,6 +194,22 @@ export const VaultCountry = z.object({
 });
 export type VaultCountry = z.infer<typeof VaultCountry>;
 
+export const VaultSanction = z.object({
+  id: z.string(),
+  subjectType: z.enum(["person", "organization", "vessel", "aircraft", "entity"]),
+  name: z.string(),
+  aliases: z.array(z.string()).default([]),
+  program: z.string().optional(),
+  authority: z.string(),
+  jurisdiction: z.string().optional(),
+  listedAt: z.string().optional(),
+  identifiers: z.record(z.string(), z.string()).default({}),
+  remarks: z.string().optional(),
+  source: z.string(),
+  provenance: z.array(VaultProvenance).default([]),
+});
+export type VaultSanction = z.infer<typeof VaultSanction>;
+
 export const VaultVessel = z.object({
   id: z.string(), // vessel:imo-... | vessel:mmsi-...
   imo: z.string().optional(),

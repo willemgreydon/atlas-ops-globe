@@ -115,6 +115,18 @@ export function listCountries(p: PageParams): Page<Record<string, unknown>> {
   return page(rows, p);
 }
 
+export function listSanctions(p: PageParams, f: { q?: string; type?: string } = {}): Page<Record<string, unknown>> {
+  const where: string[] = [];
+  const args: unknown[] = [];
+  if (f.type) { where.push("subject_type = ?"); args.push(f.type); }
+  if (f.q) { where.push("name LIKE ?"); args.push(`%${f.q.replace(/[%_]/g, "")}%`); }
+  const sql = `SELECT id, subject_type AS subjectType, name, program, authority, jurisdiction
+    FROM sanctions ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY name LIMIT ? OFFSET ?`;
+  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  return page(rows, p);
+}
+
 /** wikidata_id holds a Wikipedia URL for Event-Registry-sourced entities. */
 const asWikiUrl = (v: unknown): string | undefined =>
   typeof v === "string" && v.startsWith("http") ? v : undefined;

@@ -20,7 +20,7 @@ import {
 } from "cesium";
 import { ImageryLayer, Viewer, type CesiumComponentRef } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
-import * as satellite from "satellite.js";
+import { loadSgp4 } from "@/lib/sgp4-client";
 import { useApp, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import type { AircraftState, NewsItem, Severity, WorldEvent } from "@/types/domain";
@@ -235,40 +235,47 @@ export default function Globe() {
     const viewer = ref.current?.cesiumElement;
     if (!ready || !viewer || !app.layers.space) return;
     const ds = new CustomDataSource("satellites");
-    const tracked: { rec: satellite.SatRec; prop: ConstantPositionProperty }[] = [];
-    for (const s of app.satellites.rows) {
-      if (!s.tle1 || !s.tle2) continue;
-      let rec: satellite.SatRec;
-      try { rec = satellite.twoline2satrec(s.tle1, s.tle2); } catch { continue; }
-      if (rec.error) continue;
-      const prop = new ConstantPositionProperty();
-      const ent = ds.entities.add({ position: prop, point: {
-        pixelSize: 3.5, color: satColor(s.periodMin ?? null),
-        outlineColor: Color.BLACK.withAlpha(0.4), outlineWidth: 1,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new NearFarScalar(2.0e6, 1.4, 6.0e7, 0.5),
-      } });
-      selectionMap.set(ent, { kind: "satellite", id: s.id });
-      tracked.push({ rec, prop });
-    }
-    viewer.dataSources.add(ds);
-    const propagate = () => {
-      const now = new Date();
-      const gmst = satellite.gstime(now);
-      for (const { rec, prop } of tracked) {
-        const pv = satellite.propagate(rec, now);
-        if (!pv || typeof pv.position === "boolean" || !pv.position) continue;
-        const geo = satellite.eciToGeodetic(pv.position, gmst);
-        const lon = satellite.degreesLong(geo.longitude);
-        const lat = satellite.degreesLat(geo.latitude);
-        if (Number.isFinite(lon) && Number.isFinite(lat)) {
-          prop.setValue(Cartesian3.fromDegrees(lon, lat, geo.height * 1000));
-        }
+    const rows = app.satellites.rows;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    let cancelled = false;
+    // satellite.js is loaded lazily (code-split) to keep it out of the main bundle.
+    loadSgp4().then((sat) => {
+      if (cancelled) return;
+      const tracked: { rec: ReturnType<typeof sat.twoline2satrec>; prop: ConstantPositionProperty }[] = [];
+      for (const s of rows) {
+        if (!s.tle1 || !s.tle2) continue;
+        let rec: ReturnType<typeof sat.twoline2satrec>;
+        try { rec = sat.twoline2satrec(s.tle1, s.tle2); } catch { continue; }
+        if (rec.error) continue;
+        const prop = new ConstantPositionProperty();
+        const ent = ds.entities.add({ position: prop, point: {
+          pixelSize: 3.5, color: satColor(s.periodMin ?? null),
+          outlineColor: Color.BLACK.withAlpha(0.4), outlineWidth: 1,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          scaleByDistance: new NearFarScalar(2.0e6, 1.4, 6.0e7, 0.5),
+        } });
+        selectionMap.set(ent, { kind: "satellite", id: s.id });
+        tracked.push({ rec, prop });
       }
-    };
-    propagate();
-    const timer = setInterval(propagate, 3000);
-    return () => { clearInterval(timer); viewer.dataSources.remove(ds, true); };
+      viewer.dataSources.add(ds);
+      const propagate = () => {
+        const now = new Date();
+        const gmst = sat.gstime(now);
+        for (const { rec, prop } of tracked) {
+          const pv = sat.propagate(rec, now);
+          if (!pv || typeof pv.position === "boolean" || !pv.position) continue;
+          const geo = sat.eciToGeodetic(pv.position, gmst);
+          const lon = sat.degreesLong(geo.longitude);
+          const lat = sat.degreesLat(geo.latitude);
+          if (Number.isFinite(lon) && Number.isFinite(lat)) {
+            prop.setValue(Cartesian3.fromDegrees(lon, lat, geo.height * 1000));
+          }
+        }
+      };
+      propagate();
+      timer = setInterval(propagate, 3000);
+    });
+    return () => { cancelled = true; if (timer) clearInterval(timer); viewer.dataSources.remove(ds, true); };
   }, [ready, app.layers.space, app.satellites.rows]);
 
   // --- fly-to ---------------------------------------------------------------
