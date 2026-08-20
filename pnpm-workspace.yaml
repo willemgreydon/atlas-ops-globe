@@ -1,6 +1,8 @@
+# Approve build scripts for these deps (they only validate prebuilt binaries).
+# pnpm 11 uses the allowBuilds map; kept onlyBuiltDependencies for older pnpm.
 allowBuilds:
-  esbuild: set this to true or false
-  unrs-resolver: set this to true or false
+  esbuild: true
+  unrs-resolver: true
 onlyBuiltDependencies:
   - esbuild
   - unrs-resolver
