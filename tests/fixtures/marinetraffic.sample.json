@@ -1,0 +1,43 @@
+[
+  {
+    "MMSI": "636092833",
+    "IMO": "9811000",
+    "SHIP_ID": "5601844",
+    "LAT": "26.5871",
+    "LON": "56.2489",
+    "SPEED": "121",
+    "HEADING": "295",
+    "COURSE": "298",
+    "STATUS": "0",
+    "TIMESTAMP": "2026-08-20T14:55:00Z",
+    "SHIPNAME": "PACIFIC VOYAGER",
+    "TYPE_NAME": "Crude Oil Tanker",
+    "SHIPTYPE": "80",
+    "FLAG": "LR",
+    "DESTINATION": "FUJAIRAH",
+    "ETA": "2026-08-21T02:00:00"
+  },
+  {
+    "MMSI": "538005000",
+    "IMO": "0",
+    "SHIP_ID": "700123",
+    "LAT": "26.61",
+    "LON": "56.30",
+    "SPEED": "0",
+    "HEADING": "511",
+    "COURSE": "0",
+    "STATUS": "1",
+    "TIMESTAMP": "2026-08-20T14:50:00Z",
+    "SHIPNAME": "GULF TRADER",
+    "TYPE_NAME": "Container Ship",
+    "FLAG": "MH"
+  },
+  {
+    "MMSI": "",
+    "IMO": "",
+    "LAT": "26.7",
+    "LON": "56.1",
+    "SPEED": "50",
+    "TIMESTAMP": "2026-08-20T14:40:00Z"
+  }
+]

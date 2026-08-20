@@ -26,3 +26,6 @@ coverage
 /intelligence/_core/manifests/status.json
 /intelligence/_core/indexes/
 # Committed on purpose (small, stable): schemas, ontology.json, sources/registry.json, READMEs, manifest.json
+
+# TS incremental build info
+tsconfig.tsbuildinfo

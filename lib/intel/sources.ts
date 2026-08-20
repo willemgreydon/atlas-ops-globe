@@ -156,6 +156,16 @@ export const SOURCES: SourceRecord[] = [
     envKeys: ["AISSTREAM_API_KEY"], acquisition: A({ cacheTtlSec: 15 }),
   },
   {
+    id: "marinetraffic", name: "MarineTraffic AIS Data API (Kpler)", domains: ["maritime"], type: "api",
+    baseUrl: "https://services.marinetraffic.com/api", auth: "api-key", polling: true,
+    license: "Property of Kpler — credit-metered, redistribution restricted",
+    commercialUse: "restricted", redistribution: "restricted", attributionRequired: true,
+    attribution: "MarineTraffic", enabled: false, status: "credential-required",
+    envKeys: ["MARINETRAFFIC_API_KEY"],
+    acquisition: A({ minIntervalSec: 2, cacheTtlSec: 60, concurrency: 1 }),
+    notes: "40-char hex api_key in URL path. Adapter wired: exportvessels (PS07 bbox) → vessels + chokepoint scan; endpoints also cover exportvessel, exportvesseltrack, portcalls, port-congestion, shipsearch. Credit-metered per call.",
+  },
+  {
     id: "ourairports", name: "OurAirports", domains: ["aviation", "infrastructure"], type: "bulk",
     baseUrl: "https://davidmegginson.github.io/ourairports-data/airports.csv", auth: "none",
     polling: false, license: "Public domain", commercialUse: "allowed", redistribution: "allowed",

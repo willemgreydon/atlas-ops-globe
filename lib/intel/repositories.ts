@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "./db";
 import type {
   VaultCountry, VaultEconomicObs, VaultEntity, VaultEvent, VaultNews,
-  VaultProvenance, VaultRelationship, VaultSpaceObject, VaultVulnerability,
+  VaultProvenance, VaultRelationship, VaultSpaceObject, VaultVessel, VaultVulnerability,
 } from "./schemas";
 
 /**
@@ -159,6 +159,23 @@ export function upsertEconomicObs(o: VaultEconomicObs, db = getDb()): void {
      ON CONFLICT(id) DO UPDATE SET value=excluded.value, provenance=excluded.provenance`,
   ).run(o.id, o.countryCode, o.indicator, o.label, o.unit ?? null, o.frequency ?? null,
     o.period, o.value ?? null, o.provider, J(o.provenance));
+}
+
+// --------------------------------------------------------------------------
+// Maritime
+// --------------------------------------------------------------------------
+export function upsertVessel(v: VaultVessel, db = getDb()): void {
+  db.prepare(
+    `INSERT INTO vessels (id, imo, mmsi, name, vessel_type, flag, lat, lon, speed, course, nav_status, destination, eta, last_contact, provenance, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET name=excluded.name, vessel_type=excluded.vessel_type, flag=excluded.flag,
+       lat=excluded.lat, lon=excluded.lon, speed=excluded.speed, course=excluded.course,
+       nav_status=excluded.nav_status, destination=excluded.destination, eta=excluded.eta,
+       last_contact=excluded.last_contact, provenance=excluded.provenance, updated_at=excluded.updated_at`,
+  ).run(v.id, v.imo ?? null, v.mmsi ?? null, v.name ?? null, v.vesselType ?? null, v.flag ?? null,
+    v.lat, v.lon, v.speedKn ?? null, v.courseDeg ?? null, v.navigationStatus ?? null,
+    v.destination ?? null, v.eta ?? null, v.lastContact, J(v.provenance), now());
+  if (v.provenance?.length) insertProvenance(db, v.id, v.provenance);
 }
 
 // --------------------------------------------------------------------------

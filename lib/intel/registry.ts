@@ -6,6 +6,7 @@ import { ingestEconomics } from "./domains/economics";
 import { ingestCyber } from "./domains/cyber";
 import { ingestSpace } from "./domains/space";
 import { ingestAviationSnapshot } from "./domains/aviation";
+import { ingestMaritime } from "./domains/maritime";
 
 export interface IngestOpts {
   query?: string;
@@ -21,6 +22,7 @@ export const INGESTORS: Record<string, (o: IngestOpts) => Promise<IngestReport>>
   cyber: () => ingestCyber(),
   space: (o) => ingestSpace(o.group ?? "active", o.limit ?? 2000),
   aviation: (o) => ingestAviationSnapshot(o.limit ?? 2000),
+  maritime: () => ingestMaritime(),
   news: (o) => ingestNews(o.query),
 };
 

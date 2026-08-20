@@ -165,3 +165,23 @@ export const VaultCountry = z.object({
   provenance: z.array(VaultProvenance).default([]),
 });
 export type VaultCountry = z.infer<typeof VaultCountry>;
+
+export const VaultVessel = z.object({
+  id: z.string(), // vessel:imo-... | vessel:mmsi-...
+  imo: z.string().optional(),
+  mmsi: z.string().optional(),
+  name: z.string().optional(),
+  vesselType: z.string().optional(),
+  flag: z.string().optional(),
+  lat: z.number(),
+  lon: z.number(),
+  speedKn: z.number().nullable().optional(),
+  courseDeg: z.number().nullable().optional(),
+  headingDeg: z.number().nullable().optional(),
+  navigationStatus: z.string().optional(),
+  destination: z.string().optional(),
+  eta: z.string().optional(),
+  lastContact: z.string(),
+  provenance: z.array(VaultProvenance).default([]),
+});
+export type VaultVessel = z.infer<typeof VaultVessel>;

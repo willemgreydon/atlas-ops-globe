@@ -113,6 +113,18 @@ export function listCountries(p: PageParams): Page<Record<string, unknown>> {
   return page(rows, p);
 }
 
+export function listVessels(p: PageParams, f: { bbox?: [number, number, number, number] | null } = {}): Page<Record<string, unknown>> {
+  const where: string[] = [];
+  const args: unknown[] = [];
+  if (f.bbox) { where.push("lon BETWEEN ? AND ? AND lat BETWEEN ? AND ?"); args.push(f.bbox[0], f.bbox[2], f.bbox[1], f.bbox[3]); }
+  const sql = `SELECT id, imo, mmsi, name, vessel_type AS vesselType, flag, lat, lon, speed AS speedKn,
+      course AS courseDeg, nav_status AS navigationStatus, destination, eta, last_contact AS lastContact
+    FROM vessels ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY last_contact DESC LIMIT ? OFFSET ?`;
+  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  return page(rows, p);
+}
+
 export function getCountryProfile(code: string): Record<string, unknown> | null {
   const db = getDb();
   const iso = code.toUpperCase();
