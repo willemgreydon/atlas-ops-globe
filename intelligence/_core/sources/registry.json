@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T16:18:26.485Z",
+  "generatedAt": "2026-08-20T18:22:46.752Z",
   "sources": [
     {
       "id": "naturalearth",
@@ -405,14 +405,43 @@
       "redistribution": "review-required",
       "attributionRequired": true,
       "attribution": "Open-Meteo (CC BY 4.0)",
-      "enabled": false,
-      "status": "next",
+      "enabled": true,
+      "status": "implemented",
       "acquisition": {
         "minIntervalSec": 1,
         "cacheTtlSec": 900,
         "concurrency": 4,
         "maxRetries": 3
-      }
+      },
+      "notes": "Current weather for major cities (point observations). Wired for the weather domain."
+    },
+    {
+      "id": "finnhub",
+      "name": "Finnhub",
+      "domains": [
+        "markets"
+      ],
+      "type": "api",
+      "baseUrl": "https://finnhub.io/api/v1/",
+      "auth": "api-key",
+      "polling": true,
+      "license": "Finnhub terms",
+      "commercialUse": "review-required",
+      "redistribution": "restricted",
+      "attributionRequired": true,
+      "attribution": "Finnhub",
+      "enabled": true,
+      "status": "implemented",
+      "envKeys": [
+        "FINNHUB_API_KEY"
+      ],
+      "acquisition": {
+        "minIntervalSec": 1,
+        "cacheTtlSec": 30,
+        "concurrency": 4,
+        "maxRetries": 3
+      },
+      "notes": "Free tier 60 req/min, real-time US equities/ETFs. Index quotes via ETF proxies (SPY/QQQ/DIA)."
     },
     {
       "id": "ofac",

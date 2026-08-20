@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useApp, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { operatorFromCallsign } from "@/data/airlines-icao";
 import StatusBadge from "@/components/common/StatusBadge";
 import type { AircraftState, DataStatus, NewsItem, Provenance, WorldEvent } from "@/types/domain";
 
@@ -106,16 +107,22 @@ function ProvenanceBlock({ p }: { p?: Provenance }) {
 
 function AircraftView({ a }: { a: AircraftState }) {
   const app = useApp();
+  const operator = operatorFromCallsign(a.callsign);
+  const icao24 = a.id.replace("aircraft:", "").toUpperCase();
+  const climb = a.verticalRateMs;
+  const vs = climb == null ? "—" : `${climb > 0.3 ? "▲ climbing" : climb < -0.3 ? "▼ descending" : "level"} ${Math.abs(Math.round(climb * 196.85))} ft/min`;
   return (
     <>
-      <div className="entity-title">{a.callsign ?? a.id.replace("aircraft:", "").toUpperCase()}</div>
-      <div className="entity-sub">Aircraft · ADS-B</div>
+      <div className="entity-title">{a.callsign ?? icao24}</div>
+      <div className="entity-sub">Aircraft · ADS-B{operator ? ` · ${operator}` : ""}</div>
       <div className="field-grid">
+        <Field label="Operator" value={operator} />
+        <Field label="ICAO24" value={icao24.toLowerCase()} />
         <Field label="Origin country" value={a.country} />
-        <Field label="Altitude" value={a.position.alt != null ? `${Math.round(a.position.alt)} m` : "—"} />
-        <Field label="Ground speed" value={a.velocityMs != null ? `${Math.round(a.velocityMs)} m/s` : "—"} />
+        <Field label="Altitude" value={a.position.alt != null ? `${Math.round(a.position.alt)} m · FL${Math.round((a.position.alt * 3.281) / 100)}` : "—"} />
+        <Field label="Ground speed" value={a.velocityMs != null ? `${Math.round(a.velocityMs * 1.944)} kn` : "—"} />
         <Field label="Heading" value={a.headingDeg != null ? `${Math.round(a.headingDeg)}°` : "—"} />
-        <Field label="Vertical rate" value={a.verticalRateMs != null ? `${a.verticalRateMs.toFixed(1)} m/s` : "—"} />
+        <Field label="Vertical rate" value={vs} />
         <Field label="On ground" value={a.onGround == null ? "—" : a.onGround ? "yes" : "no"} />
         <Field label="Position" value={coord(a.position.lat, a.position.lon)} />
         <Field label="Last contact" value={since(a.lastContact)} />
