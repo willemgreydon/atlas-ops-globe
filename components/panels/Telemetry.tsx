@@ -29,6 +29,7 @@ export default function Telemetry() {
         <Row label="Aircraft" meta={app.aircraft.meta} on={app.layers.aircraft} />
         <Row label="Events" meta={app.events.meta} on={app.layers.earthquakes || app.layers.naturalEvents} />
         <Row label="Vessels" meta={app.vessels.meta} on={app.layers.maritime} />
+        <Row label="Weather" meta={app.weather.meta} on={app.layers.weather} />
         <Row label="News" meta={app.news.meta} on={app.layers.news} />
       </div>
       <p className="tele-blurb">{mode.blurb}</p>

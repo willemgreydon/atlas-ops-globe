@@ -162,6 +162,15 @@ const MIGRATIONS: Migration[] = [
     CREATE VIRTUAL TABLE fts_entities USING fts5(id UNINDEXED, name, aliases);
     `,
   },
+  {
+    id: 3,
+    name: "weather-place",
+    up: `
+    ALTER TABLE weather_observations ADD COLUMN place TEXT;
+    ALTER TABLE weather_observations ADD COLUMN country_code TEXT;
+    CREATE INDEX idx_weather_variable ON weather_observations(variable);
+    `,
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): number {

@@ -9,8 +9,21 @@ export type Selection =
   | { kind: "event"; id: string }
   | { kind: "news"; id: string }
   | { kind: "vessel"; id: string }
+  | { kind: "weather"; id: string }
   | { kind: "country"; iso3: string; name?: string }
   | null;
+
+/** Weather observation point (temperature) from /api/intelligence/weather. */
+export interface WeatherRow {
+  id: string;
+  lat: number;
+  lon: number;
+  place?: string;
+  countryCode?: string;
+  value: number | null;
+  unit?: string;
+  observedAt?: string;
+}
 
 /** Vessel row as returned by /api/intelligence/maritime (vault-backed). */
 export interface VesselRow {
@@ -71,6 +84,8 @@ interface AppState {
   news: Feed<NewsItem>;
   /** Vessels from the intelligence vault (MarineTraffic; OFFLINE without a key). */
   vessels: Feed<VesselRow>;
+  /** Weather observation points from the vault (Open-Meteo). */
+  weather: Feed<WeatherRow>;
   /** Aggregated vault snapshot (SQLite-backed), or null while loading. */
   vault: VaultSnapshot | null;
   /** Fly-to request consumed by the globe; bumped on each navigation. */
@@ -80,7 +95,7 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
-const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, vault: 60_000 } as const;
+const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, weather: 600_000, vault: 60_000 } as const;
 
 function defaultLayerVisibility(mode: ModeId): Record<LayerId, boolean> {
   const on = new Set(MODE_BY_ID[mode].defaultLayers);
@@ -195,6 +210,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const news = useFeed<NewsItem>("/api/news", POLL_MS.news, layers.news);
   // Vault-backed vessels (MarineTraffic via the intelligence API).
   const vessels = useFeed<VesselRow>("/api/intelligence/maritime?limit=500", POLL_MS.vessels, layers.maritime);
+  const weather = useFeed<WeatherRow>("/api/intelligence/weather?limit=200", POLL_MS.weather, layers.weather);
   const vault = useVaultSnapshot();
 
   const value = useMemo<AppState>(
@@ -211,11 +227,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       events,
       news,
       vessels,
+      weather,
       vault,
       flyTo,
       requestFlyTo,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, vault, flyTo, requestFlyTo],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, weather, vault, flyTo, requestFlyTo],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

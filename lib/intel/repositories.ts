@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import type {
   VaultCountry, VaultEconomicObs, VaultEntity, VaultEvent, VaultNews,
   VaultProvenance, VaultRelationship, VaultSpaceObject, VaultVessel, VaultVulnerability,
+  VaultWeatherObs,
 } from "./schemas";
 
 /**
@@ -176,6 +177,19 @@ export function upsertVessel(v: VaultVessel, db = getDb()): void {
     v.lat, v.lon, v.speedKn ?? null, v.courseDeg ?? null, v.navigationStatus ?? null,
     v.destination ?? null, v.eta ?? null, v.lastContact, J(v.provenance), now());
   if (v.provenance?.length) insertProvenance(db, v.id, v.provenance);
+}
+
+// --------------------------------------------------------------------------
+// Weather
+// --------------------------------------------------------------------------
+export function upsertWeatherObs(o: VaultWeatherObs, db = getDb()): void {
+  db.prepare(
+    `INSERT INTO weather_observations (id, lat, lon, place, country_code, observed_at, variable, value, unit, provider, provenance)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET observed_at=excluded.observed_at, value=excluded.value,
+       unit=excluded.unit, provenance=excluded.provenance`,
+  ).run(o.id, o.lat, o.lon, o.place ?? null, o.countryCode ?? null, o.observedAt, o.variable,
+    o.value ?? null, o.unit ?? null, o.provider, J(o.provenance));
 }
 
 // --------------------------------------------------------------------------

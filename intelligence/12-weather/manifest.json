@@ -1,8 +1,10 @@
 {
   "domain": "weather",
-  "status": "scaffolded",
+  "status": "implemented",
   "sources": ["openmeteo"],
   "canonicalEntities": ["WeatherObservation"],
   "storage": ["weather_observations", "provenance"],
+  "coverage": "36 major cities, current conditions (point observations)",
+  "note": "Live via Open-Meteo (no key, CC BY 4.0). Raster fields are future work.",
   "updatedAt": "2026-08-20"
 }

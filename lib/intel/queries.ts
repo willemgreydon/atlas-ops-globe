@@ -113,6 +113,18 @@ export function listCountries(p: PageParams): Page<Record<string, unknown>> {
   return page(rows, p);
 }
 
+export function listWeather(p: PageParams, f: { variable?: string; bbox?: [number, number, number, number] | null } = {}): Page<Record<string, unknown>> {
+  const where: string[] = ["variable = ?"];
+  // Default to temperature so there's one marker per city, not one per variable.
+  const args: unknown[] = [f.variable ?? "temperature_2m"];
+  if (f.bbox) { where.push("lon BETWEEN ? AND ? AND lat BETWEEN ? AND ?"); args.push(f.bbox[0], f.bbox[2], f.bbox[1], f.bbox[3]); }
+  const sql = `SELECT id, lat, lon, place, country_code AS countryCode, observed_at AS observedAt,
+      variable, value, unit, provider FROM weather_observations
+    WHERE ${where.join(" AND ")} ORDER BY place LIMIT ? OFFSET ?`;
+  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  return page(rows, p);
+}
+
 export function listVessels(p: PageParams, f: { bbox?: [number, number, number, number] | null } = {}): Page<Record<string, unknown>> {
   const where: string[] = [];
   const args: unknown[] = [];

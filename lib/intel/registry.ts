@@ -7,6 +7,7 @@ import { ingestCyber } from "./domains/cyber";
 import { ingestSpace } from "./domains/space";
 import { ingestAviationSnapshot } from "./domains/aviation";
 import { ingestMaritime } from "./domains/maritime";
+import { ingestWeather } from "./domains/weather";
 
 export interface IngestOpts {
   query?: string;
@@ -23,11 +24,12 @@ export const INGESTORS: Record<string, (o: IngestOpts) => Promise<IngestReport>>
   space: (o) => ingestSpace(o.group ?? "active", o.limit ?? 2000),
   aviation: (o) => ingestAviationSnapshot(o.limit ?? 2000),
   maritime: () => ingestMaritime(),
+  weather: () => ingestWeather(),
   news: (o) => ingestNews(o.query),
 };
 
 /** Bootstrap order: cheap/offline first, rate-limited news last. */
-export const BOOTSTRAP_ORDER = ["countries", "disasters", "economics", "cyber", "space", "news"];
+export const BOOTSTRAP_ORDER = ["countries", "disasters", "economics", "cyber", "space", "weather", "news"];
 
 /** Incremental update set (skips the one-off country seed). */
-export const UPDATE_ORDER = ["disasters", "economics", "cyber", "space", "news"];
+export const UPDATE_ORDER = ["disasters", "economics", "cyber", "space", "weather", "news"];

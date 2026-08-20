@@ -176,8 +176,9 @@ export const SOURCES: SourceRecord[] = [
     id: "openmeteo", name: "Open-Meteo", domains: ["weather", "environment"], type: "api",
     baseUrl: "https://api.open-meteo.com/v1/", auth: "none", polling: true,
     license: "CC BY 4.0", commercialUse: "allowed", redistribution: "review-required",
-    attributionRequired: true, attribution: "Open-Meteo (CC BY 4.0)", enabled: false, status: "next",
+    attributionRequired: true, attribution: "Open-Meteo (CC BY 4.0)", enabled: true, status: "implemented",
     acquisition: A({ minIntervalSec: 1, cacheTtlSec: 900, concurrency: 4 }),
+    notes: "Current weather for major cities (point observations). Wired for the weather domain.",
   },
   {
     id: "ofac", name: "OFAC Sanctions List Service", domains: ["sanctions"], type: "bulk",

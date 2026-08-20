@@ -25,7 +25,7 @@ export interface LayerDef {
   color: string;
   status: "active" | "planned";
   /** Which data feed drives this layer, for the fetch scheduler. */
-  feed?: "aircraft" | "events" | "news" | "countries" | "vessels";
+  feed?: "aircraft" | "events" | "news" | "countries" | "vessels" | "weather";
   /** For event-driven layers, which event kinds/tags belong to this layer. */
   eventKinds?: EventKind[];
   providerNote?: string;
@@ -40,7 +40,7 @@ export const LAYERS: LayerDef[] = [
   { id: "maritime", label: "Maritime / AIS", color: "#4fd6d1", status: "active", feed: "vessels", providerNote: "MarineTraffic vault (needs API key)" },
   { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "planned", providerNote: "ACLED (planned)" },
   { id: "cyber", label: "Cyber exposure", color: "#b18cff", status: "planned", providerNote: "CISA KEV / NVD (planned)" },
-  { id: "weather", label: "Weather / clouds", color: "#9ad7ff", status: "planned", providerNote: "Open-Meteo (planned)" },
+  { id: "weather", label: "Weather (cities)", color: "#9ad7ff", status: "active", feed: "weather", providerNote: "Open-Meteo current conditions" },
   { id: "markets", label: "Markets", color: "#ffd166", status: "planned", providerNote: "Market feed (planned)" },
   { id: "space", label: "Satellites", color: "#c0c8d4", status: "planned", providerNote: "CelesTrak (planned)" },
   { id: "sanctions", label: "Sanctions", color: "#ff9db1", status: "planned", providerNote: "OFAC/EU (planned)" },

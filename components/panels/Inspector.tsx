@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { useApp, type VesselRow } from "@/stores/app-store";
+import { useApp, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import StatusBadge from "@/components/common/StatusBadge";
 import type { AircraftState, DataStatus, NewsItem, Provenance, WorldEvent } from "@/types/domain";
 
@@ -38,6 +38,9 @@ export default function Inspector() {
   } else if (sel.kind === "vessel") {
     const v = app.vessels.rows.find((r) => r.id === sel.id);
     body = v ? <VesselView v={v} /> : <Missing kind="Vessel" />;
+  } else if (sel.kind === "weather") {
+    const w = app.weather.rows.find((r) => r.id === sel.id);
+    body = w ? <WeatherView w={w} /> : <Missing kind="Weather" />;
   } else if (sel.kind === "country") {
     body = <CountryView iso3={sel.iso3} name={sel.name} />;
   }
@@ -180,6 +183,24 @@ function VesselView({ v }: { v: VesselRow }) {
         <Field label="Last contact" value={since(v.lastContact)} />
       </div>
       <button className="link-btn" onClick={() => app.requestFlyTo(v.lat, v.lon)}>Focus on globe</button>
+    </>
+  );
+}
+
+function WeatherView({ w }: { w: WeatherRow }) {
+  const app = useApp();
+  return (
+    <>
+      <div className="entity-title">{w.place ?? "Weather"}{w.value != null ? ` · ${Math.round(w.value)}${w.unit ?? "°"}` : ""}</div>
+      <div className="entity-sub">Weather · Open-Meteo</div>
+      <div className="field-grid">
+        <Field label="Temperature" value={w.value != null ? `${w.value}${w.unit ?? "°C"}` : "—"} />
+        <Field label="Country" value={w.countryCode} />
+        <Field label="Observed" value={w.observedAt ? since(`${w.observedAt}Z`) : undefined} />
+        <Field label="Position" value={coord(w.lat, w.lon)} />
+      </div>
+      <button className="link-btn" onClick={() => app.requestFlyTo(w.lat, w.lon)}>Focus on globe</button>
+      <p className="muted-note">Current conditions · CC BY 4.0 Open-Meteo</p>
     </>
   );
 }

@@ -18,7 +18,7 @@ import {
 } from "cesium";
 import { ImageryLayer, Viewer, type CesiumComponentRef } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
-import { useApp, type VesselRow } from "@/stores/app-store";
+import { useApp, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import type { AircraftState, NewsItem, Severity, WorldEvent } from "@/types/domain";
 
@@ -181,6 +181,18 @@ export default function Globe() {
     return () => { viewer.dataSources.remove(ds, true); };
   }, [app.layers.maritime, app.vessels.rows]);
 
+  // --- weather layer (Open-Meteo city observations) -------------------------
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!viewer) return;
+    const ds = new CustomDataSource("weather");
+    if (app.layers.weather) {
+      for (const w of app.weather.rows) addWeather(ds, w);
+      viewer.dataSources.add(ds);
+    }
+    return () => { viewer.dataSources.remove(ds, true); };
+  }, [app.layers.weather, app.weather.rows]);
+
   // --- fly-to ---------------------------------------------------------------
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
@@ -269,4 +281,34 @@ function addVessel(ds: CustomDataSource, v: VesselRow) {
     },
   });
   selectionMap.set(ent, { kind: "vessel", id: v.id });
+}
+
+// Blue (cold) → red (hot) ramp for temperature in °C.
+function tempColor(c: number): Color {
+  const t = Math.max(0, Math.min(1, (c + 10) / 50)); // -10°C..40°C → 0..1
+  return Color.fromHsl((1 - t) * 0.66, 0.85, 0.55);
+}
+
+function addWeather(ds: CustomDataSource, w: WeatherRow) {
+  const temp = w.value;
+  const ent = ds.entities.add({
+    position: Cartesian3.fromDegrees(w.lon, w.lat, 0),
+    point: {
+      pixelSize: 9,
+      color: (temp != null ? tempColor(temp) : Color.GRAY).withAlpha(0.95),
+      outlineColor: Color.WHITE.withAlpha(0.5),
+      outlineWidth: 1,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+    },
+    label: temp != null ? {
+      text: `${Math.round(temp)}°`,
+      font: "600 12px Inter, sans-serif",
+      fillColor: Color.WHITE,
+      showBackground: true,
+      backgroundColor: Color.fromCssColorString("#0c1016").withAlpha(0.7),
+      pixelOffset: new Cartesian2(0, -16),
+      scaleByDistance: new NearFarScalar(2.0e6, 1.0, 1.2e7, 0.0),
+    } : undefined,
+  });
+  selectionMap.set(ent, { kind: "weather", id: w.id });
 }

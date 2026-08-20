@@ -1,0 +1,42 @@
+[
+  {
+    "latitude": 35.68,
+    "longitude": 139.69,
+    "current_units": {
+      "time": "iso8601",
+      "temperature_2m": "°C",
+      "relative_humidity_2m": "%",
+      "wind_speed_10m": "km/h",
+      "wind_direction_10m": "°",
+      "pressure_msl": "hPa",
+      "weather_code": "wmo code"
+    },
+    "current": {
+      "time": "2026-08-20T16:45",
+      "temperature_2m": 24.6,
+      "relative_humidity_2m": 78,
+      "wind_speed_10m": 11.2,
+      "wind_direction_10m": 210,
+      "pressure_msl": 1009.4,
+      "weather_code": 3
+    }
+  },
+  {
+    "latitude": 51.51,
+    "longitude": -0.13,
+    "current_units": {
+      "time": "iso8601",
+      "temperature_2m": "°C",
+      "wind_speed_10m": "km/h"
+    },
+    "current": {
+      "time": "2026-08-20T16:45",
+      "temperature_2m": 17.1,
+      "relative_humidity_2m": 65,
+      "wind_speed_10m": 19.8,
+      "wind_direction_10m": 250,
+      "pressure_msl": 1014.0,
+      "weather_code": 61
+    }
+  }
+]

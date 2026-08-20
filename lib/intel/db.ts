@@ -20,7 +20,9 @@ const { DatabaseSync } = (
 let handle: DatabaseSync | null = null;
 
 export function dbPath(): string {
-  return process.env.INTEL_DB_PATH ?? resolve(process.cwd(), "data", "intelligence.db");
+  // Use `||` not `??`: an empty INTEL_DB_PATH (e.g. a blank line in .env.local)
+  // must fall back to the default, not become an empty path.
+  return process.env.INTEL_DB_PATH || resolve(process.cwd(), "data", "intelligence.db");
 }
 
 export function getDb(): DatabaseSync {

@@ -185,3 +185,18 @@ export const VaultVessel = z.object({
   provenance: z.array(VaultProvenance).default([]),
 });
 export type VaultVessel = z.infer<typeof VaultVessel>;
+
+export const VaultWeatherObs = z.object({
+  id: z.string(),
+  lat: z.number(),
+  lon: z.number(),
+  place: z.string().optional(),
+  countryCode: z.string().optional(),
+  observedAt: z.string(),
+  variable: z.string(), // temperature_2m | wind_speed_10m | ...
+  value: z.number().nullable(),
+  unit: z.string().optional(),
+  provider: z.string(),
+  provenance: z.array(VaultProvenance).default([]),
+});
+export type VaultWeatherObs = z.infer<typeof VaultWeatherObs>;
