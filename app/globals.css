@@ -188,6 +188,13 @@ button.mini-row:hover { background: rgba(255, 255, 255, 0.04); }
 .sev-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px; background: var(--muted-2); vertical-align: middle; }
 .sev-dot.sev-critical { background: var(--critical); } .sev-dot.sev-warning { background: var(--warning); } .sev-dot.sev-watch { background: var(--watch); }
 
+/* ---- Trending entities ---- */
+.trending .panel-body { padding: 4px 12px 12px; }
+.ent-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; font-size: 12px; color: #d6dce5; }
+a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; color: var(--text); }
+.ent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ent-count { font: 700 10px/1 var(--mono); color: var(--accent); padding: 2px 6px; border: 1px solid var(--line); border-radius: 20px; flex-shrink: 0; }
+
 /* =========================================================================
    Ticker
    ========================================================================= */

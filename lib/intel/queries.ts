@@ -113,6 +113,28 @@ export function listCountries(p: PageParams): Page<Record<string, unknown>> {
   return page(rows, p);
 }
 
+/** wikidata_id holds a Wikipedia URL for Event-Registry-sourced entities. */
+const asWikiUrl = (v: unknown): string | undefined =>
+  typeof v === "string" && v.startsWith("http") ? v : undefined;
+
+export function listPersons(p: PageParams): Page<Record<string, unknown>> {
+  const rows = getDb().prepare(
+    `SELECT id, canonical_name AS name, mention_count AS mentions, wikidata_id AS wiki, countries
+     FROM persons ORDER BY mention_count DESC, canonical_name LIMIT ? OFFSET ?`,
+  ).all(p.limit, p.offset) as Record<string, unknown>[];
+  for (const r of rows) { r.countries = parseJson(r.countries, []); r.wikipediaUrl = asWikiUrl(r.wiki); delete r.wiki; }
+  return page(rows, p);
+}
+
+export function listOrganizations(p: PageParams): Page<Record<string, unknown>> {
+  const rows = getDb().prepare(
+    `SELECT id, canonical_name AS name, mention_count AS mentions, wikidata_id AS wiki, country_code AS countryCode
+     FROM organizations ORDER BY mention_count DESC, canonical_name LIMIT ? OFFSET ?`,
+  ).all(p.limit, p.offset) as Record<string, unknown>[];
+  for (const r of rows) { r.wikipediaUrl = asWikiUrl(r.wiki); delete r.wiki; }
+  return page(rows, p);
+}
+
 export function listMarkets(p: PageParams): Page<Record<string, unknown>> {
   // Indices first, then equities — a stable ticker order.
   const rows = getDb().prepare(

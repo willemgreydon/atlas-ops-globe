@@ -5,6 +5,7 @@ import AlertCenter from "@/components/panels/AlertCenter";
 import Telemetry from "@/components/panels/Telemetry";
 import NewsFeed from "@/components/panels/NewsFeed";
 import VaultPanel from "@/components/panels/VaultPanel";
+import TrendingEntities from "@/components/panels/TrendingEntities";
 
 /**
  * Right analytical column. The inspector takes the top slot when something is
@@ -17,6 +18,7 @@ export default function RightStack() {
     <div className="right-stack">
       {app.selection ? <Inspector /> : <AlertCenter />}
       <Telemetry />
+      <TrendingEntities />
       <VaultPanel />
       <NewsFeed />
     </div>

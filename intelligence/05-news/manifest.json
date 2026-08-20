@@ -1,8 +1,10 @@
 {
   "domain": "news",
   "status": "implemented",
-  "sources": ["gdelt", "wikidata"],
-  "canonicalEntities": ["NewsArticle", "NewsStory", "Publication"],
-  "storage": ["news_articles", "news_stories", "fts_news", "relationships", "provenance"],
+  "sources": ["eventregistry", "newsapi", "gdelt"],
+  "canonicalEntities": ["NewsArticle", "NewsStory", "Person", "Organization", "Publisher"],
+  "storage": ["news_articles", "news_stories", "persons", "organizations", "entities", "relationships", "fts_news", "provenance"],
+  "entityGraph": "Event Registry concepts → persons/organizations (Wikipedia-linked) + article MENTIONS edges",
+  "note": "Multi-source, deduped by URL. Metadata/links only — never full article bodies. NewsAPI free tier is delayed/non-commercial (labelled).",
   "updatedAt": "2026-08-20"
 }

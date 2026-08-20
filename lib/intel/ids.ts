@@ -38,6 +38,18 @@ export const IdOf = {
     `econobs:${country.toUpperCase()}:${indicator}:${period}`,
 } as const;
 
+/** Extract a stable slug from a Wikipedia/Wikidata concept URI. */
+export function wikiSlug(uri: string): string {
+  const m = /\/([^/]+)$/.exec(uri.trim());
+  return (m?.[1] ?? uri).replace(/[^A-Za-z0-9_()-]/g, "");
+}
+
+/** Identity for a person/org derived from an EventRegistry concept Wikipedia URI. */
+export const IdFromWiki = {
+  person: (uri: string) => `person:wiki-${wikiSlug(uri)}`,
+  org: (uri: string) => `org:wiki-${wikiSlug(uri)}`,
+};
+
 /** Parse the `type` prefix from a universal id (`country:AT` -> `country`). */
 export function typeOfId(id: string): string {
   const i = id.indexOf(":");

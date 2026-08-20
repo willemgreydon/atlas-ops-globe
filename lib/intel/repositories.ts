@@ -2,8 +2,8 @@ import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "./db";
 import type {
   VaultCountry, VaultEconomicObs, VaultEntity, VaultEvent, VaultMarketObs, VaultNews,
-  VaultProvenance, VaultRelationship, VaultSpaceObject, VaultVessel, VaultVulnerability,
-  VaultWeatherObs,
+  VaultOrganization, VaultPerson, VaultProvenance, VaultRelationship, VaultSpaceObject,
+  VaultVessel, VaultVulnerability, VaultWeatherObs,
 } from "./schemas";
 
 /**
@@ -160,6 +160,35 @@ export function upsertEconomicObs(o: VaultEconomicObs, db = getDb()): void {
      ON CONFLICT(id) DO UPDATE SET value=excluded.value, provenance=excluded.provenance`,
   ).run(o.id, o.countryCode, o.indicator, o.label, o.unit ?? null, o.frequency ?? null,
     o.period, o.value ?? null, o.provider, J(o.provenance));
+}
+
+// --------------------------------------------------------------------------
+// Persons & organizations (entity graph)
+// --------------------------------------------------------------------------
+/** Upsert a person; increments mention_count and merges countries on conflict. */
+export function upsertPerson(p: VaultPerson, db = getDb()): void {
+  db.prepare(
+    `INSERT INTO persons (id, canonical_name, aliases, wikidata_id, roles, organizations, countries, data, mention_count, provenance, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET canonical_name=excluded.canonical_name,
+       countries=excluded.countries, data=excluded.data,
+       mention_count=persons.mention_count + excluded.mention_count, updated_at=excluded.updated_at`,
+  ).run(p.id, p.canonicalName, J(p.aliases), p.wikidataId ?? p.wikipediaUrl ?? null, J(p.roles),
+    J([]), J(p.countries), J(p.data), p.mentionCount, J(p.provenance), now());
+  upsertEntity({ id: p.id, type: "Person", name: p.canonicalName, countryCode: p.countries[0],
+    data: { wikipediaUrl: p.wikipediaUrl }, provenance: p.provenance }, db);
+}
+
+export function upsertOrganization(o: VaultOrganization, db = getDb()): void {
+  db.prepare(
+    `INSERT INTO organizations (id, canonical_name, aliases, wikidata_id, lei, country_code, data, mention_count, provenance, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET canonical_name=excluded.canonical_name, country_code=excluded.country_code,
+       data=excluded.data, mention_count=organizations.mention_count + excluded.mention_count, updated_at=excluded.updated_at`,
+  ).run(o.id, o.canonicalName, J(o.aliases), o.wikidataId ?? o.wikipediaUrl ?? null, o.lei ?? null,
+    o.countryCode ?? null, J(o.data), o.mentionCount, J(o.provenance), now());
+  upsertEntity({ id: o.id, type: "Organization", name: o.canonicalName, countryCode: o.countryCode,
+    data: { wikipediaUrl: o.wikipediaUrl }, provenance: o.provenance }, db);
 }
 
 // --------------------------------------------------------------------------

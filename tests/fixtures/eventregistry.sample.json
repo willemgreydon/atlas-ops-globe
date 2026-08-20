@@ -1,0 +1,24 @@
+{
+  "articles": {
+    "results": [
+      {
+        "uri": "12345",
+        "url": "https://example.com/a1",
+        "title": "Putin and Zelensky discuss ceasefire terms",
+        "dateTime": "2026-08-20T09:30:00Z",
+        "lang": "eng",
+        "source": { "title": "Reuters", "uri": "reuters.com" },
+        "sentiment": -0.2,
+        "location": { "country": { "label": { "eng": "Ukraine" } } },
+        "concepts": [
+          { "uri": "http://en.wikipedia.org/wiki/Vladimir_Putin", "type": "person", "score": 5, "label": { "eng": "Vladimir Putin" } },
+          { "uri": "http://en.wikipedia.org/wiki/Volodymyr_Zelenskyy", "type": "person", "score": 5, "label": { "eng": "Volodymyr Zelenskyy" } },
+          { "uri": "http://en.wikipedia.org/wiki/NATO", "type": "org", "score": 4, "label": { "eng": "NATO" } },
+          { "uri": "http://en.wikipedia.org/wiki/Ukraine", "type": "loc", "score": 3, "label": { "eng": "Ukraine" }, "location": { "country": { "label": { "eng": "Ukraine" } } } },
+          { "uri": "http://en.wikipedia.org/wiki/Minor_Thing", "type": "person", "score": 1, "label": { "eng": "Ignored Low Score" } }
+        ],
+        "categories": [{ "label": "news/Politics" }]
+      }
+    ]
+  }
+}

@@ -153,6 +153,34 @@ export const VaultEconomicObs = z.object({
 });
 export type VaultEconomicObs = z.infer<typeof VaultEconomicObs>;
 
+export const VaultPerson = z.object({
+  id: z.string(),
+  canonicalName: z.string(),
+  aliases: z.array(z.string()).default([]),
+  wikidataId: z.string().optional(),
+  wikipediaUrl: z.string().optional(),
+  roles: z.array(z.string()).default([]),
+  countries: z.array(z.string()).default([]),
+  mentionCount: z.number().default(1),
+  data: z.record(z.string(), z.unknown()).default({}),
+  provenance: z.array(VaultProvenance).default([]),
+});
+export type VaultPerson = z.infer<typeof VaultPerson>;
+
+export const VaultOrganization = z.object({
+  id: z.string(),
+  canonicalName: z.string(),
+  aliases: z.array(z.string()).default([]),
+  wikidataId: z.string().optional(),
+  wikipediaUrl: z.string().optional(),
+  lei: z.string().optional(),
+  countryCode: z.string().optional(),
+  mentionCount: z.number().default(1),
+  data: z.record(z.string(), z.unknown()).default({}),
+  provenance: z.array(VaultProvenance).default([]),
+});
+export type VaultOrganization = z.infer<typeof VaultOrganization>;
+
 export const VaultCountry = z.object({
   iso2: z.string(),
   iso3: z.string(),
