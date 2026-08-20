@@ -1,21 +1,38 @@
-import { fetchCelestrak } from "../providers/celestrak";
+import { fetchCelestrakTLE } from "../providers/celestrak";
+import { fetchSpaceTrack, spaceTrackConfigured } from "../providers/spacetrack";
 import { log } from "@/lib/core/logger";
 import { runIngestor, type IngestReport } from "../ingest";
 import { upsertSpaceObject } from "../repositories";
+import type { VaultSpaceObject } from "../schemas";
 
 /**
- * CelesTrak satellite catalogue (OMM elements, SGP4-ready) → space_objects.
- * Stores orbital metadata, not propagated positions. `limit` caps how many are
- * stored per run; any truncation is logged (never silent).
+ * Satellite catalogue with SGP4-ready TLEs → space_objects. Prefers Space-Track
+ * (authoritative, full catalogue) when SPACE_TRACK_USERNAME/PASSWORD are set,
+ * else CelesTrak (free, curated groups). We store TLE lines + derived orbit
+ * metadata, never propagated positions — the client propagates via SGP4.
+ * `limit` caps how many are stored; truncation is logged, never silent.
  */
-export async function ingestSpace(group = "active", limit = 2000): Promise<IngestReport> {
-  return runIngestor({ domain: "space", source: "celestrak", job: `catalog-${group}` }, async (c) => {
-    const objects = await fetchCelestrak(group);
-    const capped = objects.slice(0, limit);
-    if (objects.length > capped.length) {
-      log.warn("celestrak result capped", { provider: "celestrak", records: objects.length, kept: capped.length });
-    }
-    for (const o of capped) { c.fetched++; upsertSpaceObject(o); c.created++; }
-    c.skipped += objects.length - capped.length;
-  });
+export async function ingestSpace(group = "active", limit = 1500): Promise<IngestReport> {
+  const useSpaceTrack = spaceTrackConfigured();
+  return runIngestor(
+    { domain: "space", source: useSpaceTrack ? "spacetrack" : "celestrak", job: `catalog-${useSpaceTrack ? "spacetrack" : group}` },
+    async (c) => {
+      let objects: VaultSpaceObject[];
+      if (useSpaceTrack) {
+        objects = await fetchSpaceTrack(limit);
+      } else {
+        objects = await fetchCelestrakTLE(group);
+      }
+      const capped = objects.slice(0, limit);
+      if (objects.length > capped.length) {
+        log.warn("space catalog capped", { provider: useSpaceTrack ? "spacetrack" : "celestrak", records: objects.length, kept: capped.length });
+      }
+      for (const o of capped) {
+        c.fetched++;
+        upsertSpaceObject(o);
+        c.created++;
+      }
+      c.skipped += objects.length - capped.length;
+    },
+  );
 }

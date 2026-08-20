@@ -1,8 +1,10 @@
 {
   "domain": "space",
   "status": "implemented",
-  "sources": ["celestrak"],
+  "sources": ["spacetrack", "celestrak"],
   "canonicalEntities": ["Satellite", "SpaceObject", "Orbit"],
   "storage": ["space_objects", "provenance"],
+  "propagation": "SGP4 (satellite.js) client-side from stored TLEs; positions never stored",
+  "note": "Space-Track (authoritative full GP/TLE catalogue) preferred when credentials set, else CelesTrak (free TLE). Payloads only, catalogue order.",
   "updatedAt": "2026-08-20"
 }

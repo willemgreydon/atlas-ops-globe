@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { useApp, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import * as satellite from "satellite.js";
+import { useApp, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { operatorFromCallsign } from "@/data/airlines-icao";
 import StatusBadge from "@/components/common/StatusBadge";
 import type { AircraftState, DataStatus, NewsItem, Provenance, WorldEvent } from "@/types/domain";
@@ -42,6 +43,9 @@ export default function Inspector() {
   } else if (sel.kind === "weather") {
     const w = app.weather.rows.find((r) => r.id === sel.id);
     body = w ? <WeatherView w={w} /> : <Missing kind="Weather" />;
+  } else if (sel.kind === "satellite") {
+    const s = app.satellites.rows.find((r) => r.id === sel.id);
+    body = s ? <SatelliteView s={s} /> : <Missing kind="Satellite" />;
   } else if (sel.kind === "country") {
     body = <CountryView iso3={sel.iso3} name={sel.name} />;
   }
@@ -208,6 +212,44 @@ function WeatherView({ w }: { w: WeatherRow }) {
       </div>
       <button className="link-btn" onClick={() => app.requestFlyTo(w.lat, w.lon)}>Focus on globe</button>
       <p className="muted-note">Current conditions · CC BY 4.0 Open-Meteo</p>
+    </>
+  );
+}
+
+function currentSubpoint(s: SatelliteRow): { lat: number; lon: number; altKm: number } | null {
+  if (!s.tle1 || !s.tle2) return null;
+  try {
+    const rec = satellite.twoline2satrec(s.tle1, s.tle2);
+    const now = new Date();
+    const pv = satellite.propagate(rec, now);
+    if (!pv || typeof pv.position === "boolean" || !pv.position) return null;
+    const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(now));
+    return { lat: satellite.degreesLat(geo.latitude), lon: satellite.degreesLong(geo.longitude), altKm: geo.height };
+  } catch { return null; }
+}
+
+function SatelliteView({ s }: { s: SatelliteRow }) {
+  const app = useApp();
+  const sub = currentSubpoint(s);
+  const regime = s.periodMin == null ? "—" : s.periodMin < 128 ? "LEO" : s.periodMin < 800 ? "MEO" : "GEO/HEO";
+  return (
+    <>
+      <div className="entity-title">{s.name}</div>
+      <div className="entity-sub">Satellite · {s.objectType ?? "object"} · {s.source ?? "catalogue"}</div>
+      <div className="field-grid">
+        <Field label="NORAD" value={s.norad} />
+        <Field label="Country" value={s.country} />
+        <Field label="Orbit" value={regime} />
+        <Field label="Inclination" value={s.inclinationDeg != null ? `${s.inclinationDeg}°` : "—"} />
+        <Field label="Period" value={s.periodMin != null ? `${s.periodMin} min` : "—"} />
+        <Field label="Apogee" value={s.apogeeKm != null ? `${s.apogeeKm} km` : "—"} />
+        <Field label="Perigee" value={s.perigeeKm != null ? `${s.perigeeKm} km` : "—"} />
+        <Field label="Element epoch" value={s.epoch ? since(s.epoch) : "—"} />
+        {sub && <Field label="Sub-point" value={coord(sub.lat, sub.lon)} />}
+        {sub && <Field label="Altitude" value={`${Math.round(sub.altKm)} km`} />}
+      </div>
+      {sub && <button className="link-btn" onClick={() => app.requestFlyTo(sub.lat, sub.lon)}>Focus on globe</button>}
+      <p className="muted-note">Position propagated live via SGP4 from the current TLE.</p>
     </>
   );
 }

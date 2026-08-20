@@ -98,10 +98,12 @@ export function listVulnerabilities(p: PageParams, opts: { kevOnly?: boolean; si
 }
 
 export function listSpace(p: PageParams): Page<Record<string, unknown>> {
+  // Objects with TLEs first — only those can be propagated on the globe.
   const rows = getDb().prepare(
-    `SELECT id, norad, cospar, name, object_type AS objectType, inclination_deg AS inclinationDeg,
-       period_min AS periodMin, apogee_km AS apogeeKm, perigee_km AS perigeeKm, epoch, source
-     FROM space_objects ORDER BY norad LIMIT ? OFFSET ?`,
+    `SELECT id, norad, cospar, name, object_type AS objectType, country, operator,
+       inclination_deg AS inclinationDeg, period_min AS periodMin, apogee_km AS apogeeKm,
+       perigee_km AS perigeeKm, epoch, tle_line1 AS tle1, tle_line2 AS tle2, source
+     FROM space_objects ORDER BY (tle_line1 IS NULL), norad LIMIT ? OFFSET ?`,
   ).all(p.limit, p.offset) as Record<string, unknown>[];
   return page(rows, p);
 }

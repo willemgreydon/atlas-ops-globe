@@ -10,8 +10,27 @@ export type Selection =
   | { kind: "news"; id: string }
   | { kind: "vessel"; id: string }
   | { kind: "weather"; id: string }
+  | { kind: "satellite"; id: string }
   | { kind: "country"; iso3: string; name?: string }
   | null;
+
+/** Satellite catalogue row (with SGP4 TLE) from /api/intelligence/space. */
+export interface SatelliteRow {
+  id: string;
+  norad: string;
+  name: string;
+  country?: string;
+  objectType?: string;
+  operator?: string;
+  inclinationDeg?: number | null;
+  periodMin?: number | null;
+  apogeeKm?: number | null;
+  perigeeKm?: number | null;
+  epoch?: string;
+  tle1?: string;
+  tle2?: string;
+  source?: string;
+}
 
 /** Weather observation point (temperature) from /api/intelligence/weather. */
 export interface WeatherRow {
@@ -105,6 +124,8 @@ interface AppState {
   markets: Feed<MarketRow>;
   /** Conflict/unrest events from the vault (ACLED). */
   conflict: Feed<WorldEvent>;
+  /** Satellite catalogue (with TLEs) from the vault; propagated on the globe. */
+  satellites: Feed<SatelliteRow>;
   /** Aggregated vault snapshot (SQLite-backed), or null while loading. */
   vault: VaultSnapshot | null;
   /** Fly-to request consumed by the globe; bumped on each navigation. */
@@ -114,7 +135,7 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
-const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, weather: 600_000, markets: 30_000, conflict: 120_000, vault: 60_000 } as const;
+const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, weather: 600_000, markets: 30_000, conflict: 120_000, satellites: 1_800_000, vault: 60_000 } as const;
 
 /** Map a flat vault event row ({lat,lon,...}) to a WorldEvent ({location}). */
 function vaultEventToWorld(r: Record<string, unknown>): WorldEvent {
@@ -253,6 +274,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const markets = useFeed<MarketRow>("/api/intelligence/markets?limit=20", POLL_MS.markets, true);
   // Conflict/unrest (ACLED) from the vault; mapped to WorldEvent for the globe.
   const conflict = useFeed<WorldEvent>("/api/intelligence/events?kind=conflict&limit=500", POLL_MS.conflict, layers.conflict, vaultEventToWorld);
+  // Satellite catalogue with TLEs — propagated client-side via SGP4.
+  const satellites = useFeed<SatelliteRow>("/api/intelligence/space?limit=900", POLL_MS.satellites, layers.space);
   const vault = useVaultSnapshot();
 
   const value = useMemo<AppState>(
@@ -272,11 +295,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       weather,
       markets,
       conflict,
+      satellites,
       vault,
       flyTo,
       requestFlyTo,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, weather, markets, conflict, vault, flyTo, requestFlyTo],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, weather, markets, conflict, satellites, vault, flyTo, requestFlyTo],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

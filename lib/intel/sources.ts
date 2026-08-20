@@ -132,6 +132,16 @@ export const SOURCES: SourceRecord[] = [
     license: "CelesTrak terms", commercialUse: "review-required", redistribution: "review-required",
     attributionRequired: true, attribution: "CelesTrak", enabled: true, status: "implemented",
     acquisition: A({ minIntervalSec: 30, cacheTtlSec: 7200, concurrency: 1 }),
+    notes: "Free SGP4 TLEs (FORMAT=tle). Fallback when Space-Track is not configured.",
+  },
+  {
+    id: "spacetrack", name: "Space-Track.org", domains: ["space"], type: "api",
+    baseUrl: "https://www.space-track.org/", auth: "oauth", polling: true,
+    license: "US Government (Space-Track user agreement)", commercialUse: "review-required",
+    redistribution: "restricted", attributionRequired: true, attribution: "Space-Track.org / US Space Force",
+    enabled: true, status: "implemented", envKeys: ["SPACE_TRACK_USERNAME", "SPACE_TRACK_PASSWORD"],
+    acquisition: A({ minIntervalSec: 60, cacheTtlSec: 21600, concurrency: 1 }),
+    notes: "Authoritative full GP/TLE catalogue. Cookie login; strict rate limits — one bounded query per sync.",
   },
   {
     id: "opensky", name: "OpenSky Network", domains: ["aviation"], type: "api",

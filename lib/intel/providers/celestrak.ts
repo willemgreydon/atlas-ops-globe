@@ -39,6 +39,15 @@ function deriveOrbit(meanMotionRevDay?: number, ecc?: number) {
 }
 const round = (n: number) => Math.round(n * 10) / 10;
 
+/** Fetch CelesTrak in TLE format (SGP4-ready lines). No key required. */
+export async function fetchCelestrakTLE(group = "active"): Promise<VaultSpaceObject[]> {
+  const { parseTleText } = await import("./tle");
+  const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(group)}&FORMAT=tle`;
+  const res = await fetch(url, { headers: { "user-agent": "atlas-ops-globe/0.1" } });
+  if (!res.ok) throw new Error(`celestrak ${res.status}`);
+  return parseTleText(await res.text(), "celestrak", group);
+}
+
 export async function fetchCelestrak(group = "active"): Promise<VaultSpaceObject[]> {
   const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(group)}&FORMAT=json`;
   const raw = await fetchJson<unknown>(url, { timeoutMs: 25_000 });
