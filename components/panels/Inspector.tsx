@@ -1,9 +1,24 @@
 "use client";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { useApp } from "@/stores/app-store";
+import { useApp, type VesselRow } from "@/stores/app-store";
 import StatusBadge from "@/components/common/StatusBadge";
-import type { AircraftState, CountryProfile, DataStatus, NewsItem, Provenance, WorldEvent } from "@/types/domain";
+import type { AircraftState, DataStatus, NewsItem, Provenance, WorldEvent } from "@/types/domain";
+
+interface VaultCountry {
+  iso2: string;
+  iso3: string;
+  name: string;
+  region?: string;
+  capital?: string;
+  lat?: number;
+  lon?: number;
+  indicators: { indicator: string; label: string; unit?: string; period?: string; value: number | null }[];
+  current: {
+    events: { id: string; title: string; severity: string; occurredAt: string }[];
+    news: { id: string; title: string; source: string; publishedAt: string }[];
+  };
+}
 
 export default function Inspector() {
   const app = useApp();
@@ -20,6 +35,9 @@ export default function Inspector() {
   } else if (sel.kind === "news") {
     const n = app.news.rows.find((r) => r.id === sel.id);
     body = n ? <NewsView n={n} /> : <Missing kind="News" />;
+  } else if (sel.kind === "vessel") {
+    const v = app.vessels.rows.find((r) => r.id === sel.id);
+    body = v ? <VesselView v={v} /> : <Missing kind="Vessel" />;
   } else if (sel.kind === "country") {
     body = <CountryView iso3={sel.iso3} name={sel.name} />;
   }
@@ -144,9 +162,31 @@ function NewsView({ n }: { n: NewsItem }) {
   );
 }
 
+function VesselView({ v }: { v: VesselRow }) {
+  const app = useApp();
+  return (
+    <>
+      <div className="entity-title">{v.name ?? v.mmsi ?? v.imo ?? "Vessel"}</div>
+      <div className="entity-sub">Vessel · {v.vesselType ?? "AIS"} · MarineTraffic</div>
+      <div className="field-grid">
+        <Field label="IMO" value={v.imo} />
+        <Field label="MMSI" value={v.mmsi} />
+        <Field label="Flag" value={v.flag} />
+        <Field label="Speed" value={v.speedKn != null ? `${v.speedKn.toFixed(1)} kn` : "—"} />
+        <Field label="Course" value={v.courseDeg != null ? `${Math.round(v.courseDeg)}°` : "—"} />
+        <Field label="Nav status" value={v.navigationStatus} />
+        <Field label="Destination" value={v.destination} />
+        <Field label="Position" value={coord(v.lat, v.lon)} />
+        <Field label="Last contact" value={since(v.lastContact)} />
+      </div>
+      <button className="link-btn" onClick={() => app.requestFlyTo(v.lat, v.lon)}>Focus on globe</button>
+    </>
+  );
+}
+
 function CountryView({ iso3, name }: { iso3: string; name?: string }) {
   const app = useApp();
-  const [profile, setProfile] = useState<CountryProfile | null>(null);
+  const [profile, setProfile] = useState<VaultCountry | null>(null);
   const [status, setStatus] = useState<DataStatus>("live");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -154,30 +194,41 @@ function CountryView({ iso3, name }: { iso3: string; name?: string }) {
   useEffect(() => {
     let live = true;
     setLoading(true);
-    fetch(`/api/country?iso=${encodeURIComponent(iso3)}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
+    // Prefer the vault country profile (indicators + recent events + news);
+    // fall back to the live World Bank route if the vault isn't populated.
+    (async () => {
+      try {
+        const res = await fetch(`/api/intelligence/countries/${encodeURIComponent(iso3)}`, { cache: "no-store" });
+        if (res.ok) {
+          const j = (await res.json()) as VaultCountry;
+          if (live) { setProfile(j); setStatus("live"); setLoading(false); }
+          return;
+        }
+        const fb = await (await fetch(`/api/country?iso=${encodeURIComponent(iso3)}`, { cache: "no-store" })).json();
         if (!live) return;
-        setProfile(j.data ?? null);
-        setStatus(j.status ?? "live");
-        setError(j.error);
+        const d = fb.data;
+        setProfile(d ? {
+          iso2: d.iso2 ?? "", iso3: d.iso3 ?? iso3, name: d.name ?? name ?? iso3, region: d.region, capital: d.capital,
+          indicators: (d.indicators ?? []).map((i: { code: string; label: string; unit?: string; year?: string; value: number | null }) => ({ indicator: i.code, label: i.label, unit: i.unit, period: i.year, value: i.value })),
+          current: { events: [], news: [] },
+        } : null);
+        setStatus(fb.status ?? "live");
+        setError(fb.error);
         setLoading(false);
-      })
-      .catch((err) => {
-        if (!live) return;
-        setError(String(err));
-        setLoading(false);
-      });
+      } catch (err) {
+        if (live) { setError(String(err)); setLoading(false); }
+      }
+    })();
     return () => { live = false; };
-  }, [iso3]);
+  }, [iso3, name]);
 
   return (
     <>
       <div className="entity-title">{profile?.name ?? name ?? iso3}</div>
       <div className="entity-sub">
-        Country · {iso3} <StatusBadge status={status} />
+        Country · {iso3} <StatusBadge status={status} /> <span className="src-chip">VAULT</span>
       </div>
-      {loading && <p className="muted-note">Loading indicators…</p>}
+      {loading && <p className="muted-note">Loading country intelligence…</p>}
       {error && <p className="muted-note">Source degraded: {error}</p>}
       {profile && (
         <>
@@ -187,18 +238,35 @@ function CountryView({ iso3, name }: { iso3: string; name?: string }) {
           </div>
           <div className="metric-grid">
             {profile.indicators.map((i) => (
-              <div className="metric" key={i.code}>
-                <label>{i.label}{i.year ? ` · ${i.year}` : ""}</label>
+              <div className="metric" key={i.indicator}>
+                <label>{i.label}{i.period ? ` · ${i.period}` : ""}</label>
                 <b>{i.value == null ? "—" : formatIndicator(i.value, i.unit)}</b>
               </div>
             ))}
           </div>
+          {profile.current.events.length > 0 && (
+            <div className="mini-section">
+              <h4>Recent events</h4>
+              {profile.current.events.slice(0, 5).map((e) => (
+                <button key={e.id} className="mini-row" onClick={() => app.select({ kind: "event", id: e.id })}>
+                  <span className={`sev-dot sev-${e.severity}`} />{e.title}
+                </button>
+              ))}
+            </div>
+          )}
+          {profile.current.news.length > 0 && (
+            <div className="mini-section">
+              <h4>Recent news</h4>
+              {profile.current.news.slice(0, 5).map((n) => (
+                <div key={n.id} className="mini-row static"><span className="mini-src">{n.source}</span>{n.title}</div>
+              ))}
+            </div>
+          )}
         </>
       )}
-      {profile?.location && (
-        <button className="link-btn" onClick={() => app.requestFlyTo(profile.location!.lat, profile.location!.lon)}>Focus on globe</button>
+      {profile?.lat != null && profile?.lon != null && (
+        <button className="link-btn" onClick={() => app.requestFlyTo(profile.lat!, profile.lon!)}>Focus on globe</button>
       )}
-      <ProvenanceBlock p={profile?.provenance} />
     </>
   );
 }

@@ -18,7 +18,7 @@ import {
 } from "cesium";
 import { ImageryLayer, Viewer, type CesiumComponentRef } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
-import { useApp } from "@/stores/app-store";
+import { useApp, type VesselRow } from "@/stores/app-store";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import type { AircraftState, NewsItem, Severity, WorldEvent } from "@/types/domain";
 
@@ -166,6 +166,21 @@ export default function Globe() {
     return () => { viewer.dataSources.remove(ds, true); };
   }, [app.layers.news, app.news.rows]);
 
+  // --- maritime layer (vessels from the intelligence vault) -----------------
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!viewer) return;
+    const ds = new CustomDataSource("vessels");
+    ds.clustering.enabled = true;
+    ds.clustering.pixelRange = 36;
+    ds.clustering.minimumClusterSize = 8;
+    if (app.layers.maritime) {
+      for (const v of app.vessels.rows) addVessel(ds, v);
+      viewer.dataSources.add(ds);
+    }
+    return () => { viewer.dataSources.remove(ds, true); };
+  }, [app.layers.maritime, app.vessels.rows]);
+
   // --- fly-to ---------------------------------------------------------------
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
@@ -240,4 +255,18 @@ function addNews(ds: CustomDataSource, n: NewsItem) {
     },
   });
   selectionMap.set(ent, { kind: "news", id: n.id });
+}
+
+function addVessel(ds: CustomDataSource, v: VesselRow) {
+  const ent = ds.entities.add({
+    position: Cartesian3.fromDegrees(v.lon, v.lat, 0),
+    point: {
+      pixelSize: 6,
+      color: Color.fromCssColorString(LAYER_BY_ID.maritime.color).withAlpha(0.95),
+      outlineColor: Color.BLACK.withAlpha(0.35),
+      outlineWidth: 1,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+    },
+  });
+  selectionMap.set(ent, { kind: "vessel", id: v.id });
 }

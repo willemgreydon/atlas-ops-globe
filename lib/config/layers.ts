@@ -25,7 +25,7 @@ export interface LayerDef {
   color: string;
   status: "active" | "planned";
   /** Which data feed drives this layer, for the fetch scheduler. */
-  feed?: "aircraft" | "events" | "news" | "countries";
+  feed?: "aircraft" | "events" | "news" | "countries" | "vessels";
   /** For event-driven layers, which event kinds/tags belong to this layer. */
   eventKinds?: EventKind[];
   providerNote?: string;
@@ -37,7 +37,7 @@ export const LAYERS: LayerDef[] = [
   { id: "earthquakes", label: "Earthquakes", color: "#ffae45", status: "active", feed: "events", eventKinds: ["disaster"], providerNote: "USGS" },
   { id: "naturalEvents", label: "Natural events", color: "#ff8a5b", status: "active", feed: "events", eventKinds: ["disaster"], providerNote: "NASA EONET" },
   { id: "news", label: "News & entities", color: "#54c7ff", status: "active", feed: "news", providerNote: "GDELT" },
-  { id: "maritime", label: "Maritime / AIS", color: "#4fd6d1", status: "planned", providerNote: "AIS provider (planned)" },
+  { id: "maritime", label: "Maritime / AIS", color: "#4fd6d1", status: "active", feed: "vessels", providerNote: "MarineTraffic vault (needs API key)" },
   { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "planned", providerNote: "ACLED (planned)" },
   { id: "cyber", label: "Cyber exposure", color: "#b18cff", status: "planned", providerNote: "CISA KEV / NVD (planned)" },
   { id: "weather", label: "Weather / clouds", color: "#9ad7ff", status: "planned", providerNote: "Open-Meteo (planned)" },

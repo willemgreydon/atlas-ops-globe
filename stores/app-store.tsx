@@ -8,8 +8,37 @@ export type Selection =
   | { kind: "aircraft"; id: string }
   | { kind: "event"; id: string }
   | { kind: "news"; id: string }
+  | { kind: "vessel"; id: string }
   | { kind: "country"; iso3: string; name?: string }
   | null;
+
+/** Vessel row as returned by /api/intelligence/maritime (vault-backed). */
+export interface VesselRow {
+  id: string;
+  imo?: string;
+  mmsi?: string;
+  name?: string;
+  vesselType?: string;
+  flag?: string;
+  lat: number;
+  lon: number;
+  speedKn?: number | null;
+  courseDeg?: number | null;
+  navigationStatus?: string;
+  destination?: string;
+  eta?: string;
+  lastContact: string;
+}
+
+/** Aggregated vault snapshot from /api/intelligence/global. */
+export interface VaultSnapshot {
+  generatedAt: string;
+  activeDisasters: number;
+  earthquakes24h: number;
+  counts: Record<string, number>;
+  criticalAlerts: { id: string; title: string; severity: string; occurredAt: string }[];
+  majorStories: { id: string; title: string; articleCount: number }[];
+}
 
 /** Liveness metadata carried on every feed so the UI never mislabels data. */
 export interface FeedMeta {
@@ -40,6 +69,10 @@ interface AppState {
   aircraft: Feed<AircraftState>;
   events: Feed<WorldEvent>;
   news: Feed<NewsItem>;
+  /** Vessels from the intelligence vault (MarineTraffic; OFFLINE without a key). */
+  vessels: Feed<VesselRow>;
+  /** Aggregated vault snapshot (SQLite-backed), or null while loading. */
+  vault: VaultSnapshot | null;
   /** Fly-to request consumed by the globe; bumped on each navigation. */
   flyTo: { lat: number; lon: number; nonce: number } | null;
   requestFlyTo: (lat: number, lon: number) => void;
@@ -47,7 +80,7 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
-const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000 } as const;
+const POLL_MS = { aircraft: 15_000, events: 60_000, news: 120_000, vessels: 30_000, vault: 60_000 } as const;
 
 function defaultLayerVisibility(mode: ModeId): Record<LayerId, boolean> {
   const on = new Set(MODE_BY_ID[mode].defaultLayers);
@@ -57,17 +90,40 @@ function defaultLayerVisibility(mode: ModeId): Record<LayerId, boolean> {
 async function fetchFeed<T>(url: string): Promise<{ rows: T[]; meta: FeedMeta }> {
   const res = await fetch(url, { cache: "no-store" });
   const json = await res.json();
-  const rows: T[] = json.rows ?? [];
+  // Live-provider routes return { rows, status, ... }; vault routes return
+  // { data, page, status?, provider? }. Handle both shapes uniformly.
+  const rows: T[] = json.rows ?? json.data ?? [];
   const meta: FeedMeta = {
-    status: json.status ?? "offline",
-    source: json.source ?? "unknown",
+    status: json.status ?? (json.data !== undefined ? "live" : "offline"),
+    source: json.source ?? json.provider ?? "vault",
     cached: !!json.cached,
     stale: !!json.stale,
     fetchedAt: json.fetchedAt ?? new Date().toISOString(),
     error: json.error,
-    count: json.count ?? rows.length,
+    count: json.count ?? json.page?.count ?? rows.length,
   };
   return { rows, meta };
+}
+
+/** Poll the aggregated vault snapshot (cheap, local SQLite). */
+function useVaultSnapshot(): VaultSnapshot | null {
+  const [snap, setSnap] = useState<VaultSnapshot | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/intelligence/global", { cache: "no-store" });
+        const json = (await res.json()) as VaultSnapshot;
+        if (live) setSnap(json);
+      } catch {
+        /* vault not populated yet — leave null, UI shows a hint */
+      }
+    };
+    load();
+    const t = setInterval(load, POLL_MS.vault);
+    return () => { live = false; clearInterval(t); };
+  }, []);
+  return snap;
 }
 
 function useFeed<T>(url: string, intervalMs: number, active: boolean): Feed<T> {
@@ -137,6 +193,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const aircraft = useFeed<AircraftState>("/api/aircraft", POLL_MS.aircraft, layers.aircraft);
   const events = useFeed<WorldEvent>("/api/events", POLL_MS.events, layers.earthquakes || layers.naturalEvents);
   const news = useFeed<NewsItem>("/api/news", POLL_MS.news, layers.news);
+  // Vault-backed vessels (MarineTraffic via the intelligence API).
+  const vessels = useFeed<VesselRow>("/api/intelligence/maritime?limit=500", POLL_MS.vessels, layers.maritime);
+  const vault = useVaultSnapshot();
 
   const value = useMemo<AppState>(
     () => ({
@@ -151,10 +210,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       aircraft,
       events,
       news,
+      vessels,
+      vault,
       flyTo,
       requestFlyTo,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, flyTo, requestFlyTo],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, vault, flyTo, requestFlyTo],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
