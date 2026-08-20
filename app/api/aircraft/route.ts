@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { fetchOpenSkyStates } from "@/lib/providers/opensky";
-import { mockAircraft } from "@/lib/mock";
+import { runProvider } from "@/lib/core/provider";
+import { openSkyProvider } from "@/lib/providers/opensky";
+
 export const dynamic = "force-dynamic";
-export async function GET(){ try { const rows = await fetchOpenSkyStates(); return NextResponse.json({provider:"opensky",live:true,rows:rows.slice(0,3000)}); } catch (error) { return NextResponse.json({provider:"mock",live:false,error:String(error),rows:mockAircraft}); } }
+
+export async function GET() {
+  const result = await runProvider(openSkyProvider);
+  return NextResponse.json({ ...result, rows: result.data });
+}

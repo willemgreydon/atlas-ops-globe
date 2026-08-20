@@ -5,3 +5,12 @@ node_modules
 .DS_Store
 coverage
 *.log
+
+# Playwright
+/test-results
+/playwright-report
+/blob-report
+
+# Next.js auto-generated AI agent files
+/AGENTS.md
+/CLAUDE.md

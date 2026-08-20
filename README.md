@@ -1,35 +1,80 @@
 # Atlas Ops Globe
 
-A production-oriented scaffold for a real-time 3D global intelligence interface: live aircraft, hazards, conflict/news overlays, public-figure/entity enrichment, country metrics, alert cards, market/ticker surfaces and provider adapters.
+A global situational-awareness surface: an interactive 3D globe that fuses live
+aviation, natural hazards, global news and country intelligence — engineered as
+the foundation of a serious, extensible intelligence platform rather than a demo.
 
-## Run
+The globe is one visualization on top of a clean pipeline:
+
+```
+External sources → Provider adapters → Validation (Zod) → Normalization
+→ Provenance + Confidence → Cache + Status → API envelope → Visualization
+```
+
+Rendering code never sees a source-specific payload. It only sees normalized
+domain records and an honest **data status** (LIVE / CACHED / MOCK / OFFLINE).
+
+## Quick start
 
 ```bash
 pnpm install
-cp .env.example .env.local
-pnpm dev
+cp .env.example .env.local   # optional — the app runs live without any keys
+pnpm dev                     # http://localhost:3000
 ```
 
-Open `http://localhost:3000`.
+No paid keys are required. OpenSky (aircraft), USGS (earthquakes), NASA EONET
+(natural events), GDELT (news) and World Bank (country stats) are wired via
+anonymous tiers. If a source fails or rate-limits, the app degrades gracefully
+and **labels** the result — it never shows mock data as live.
 
-The project boots without paid API keys. OpenSky, NASA EONET, USGS and GDELT are wired as first adapters; API routes fall back to demo data when a source is rate-limited/unavailable.
+## Scripts
 
-## Included
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Dev server |
+| `pnpm build` | Production build (Turbopack) |
+| `pnpm typecheck` | `tsc --noEmit` (strict) |
+| `pnpm lint` | ESLint (flat config) |
+| `pnpm test` | Vitest unit suite |
+| `pnpm test:e2e` | Playwright smoke tests (`pnpm exec playwright install chromium` first) |
 
-- Next.js + React + TypeScript
-- Cesium/Resium 3D globe
-- live aircraft adapter (OpenSky)
-- live natural-event adapter (NASA EONET)
-- live earthquake adapter (USGS)
-- global news adapter (GDELT DOC)
-- country profile route (World Bank)
-- normalized domain model for events, aircraft and news
-- control layer / right-side intelligence panel / live ticker UI
-- provider registry and detailed API integration plan
-- architecture, data model, feature map and legal/ops notes
+## What works today (first milestone)
 
-## Production recommendation
+- Smooth 3D globe: rotate, zoom, atmosphere, lighting, OSM imagery, star field
+- Real country borders from Natural Earth — **hover-free click selection**
+- Toggleable layers (real toggles; planned layers disabled & labelled)
+- Operational modes (Global / Aviation / Disasters / News operational; others planned)
+- Live aircraft (OpenSky) with heading-oriented icons + clustering
+- Live earthquakes (USGS) and natural events (NASA EONET)
+- Global news (GDELT)
+- Click any aircraft / event / news / country → **Inspector** with provenance
+- Country inspector with live World Bank indicators
+- Alert center derived from real events (click to focus the globe)
+- Honest LIVE / CACHED / MOCK / OFFLINE badges everywhere
+- ⌘K / Ctrl+K command palette across countries, events, news, aircraft
+- Signal ticker (real events + news; **no fabricated market figures**)
 
-Do **not** connect every external provider directly from the browser. Put all sources behind a server-side ingestion layer, normalize them into one event/entity schema, deduplicate, confidence-score, cache and stream deltas to clients via WebSocket/SSE. For heavy workloads use a queue (Kafka/Redpanda/NATS), Redis, Postgres + PostGIS, ClickHouse/Timescale for time series, and object storage for raw source snapshots.
+## Architecture at a glance
 
-See `docs/` for the full plan.
+```
+app/api/*          server routes → ProviderResult envelope
+lib/core/          provider framework, cache, confidence, provenance, geo, id, logger
+lib/providers/*    one adapter per source (Zod-validated, provenance-tagged)
+lib/config/*       layer & mode catalogues
+stores/            client app store (mode, layers, selection, polling)
+components/        globe, layout, panels, search, common
+data/              provider registry (licensing), generated country centroids
+types/domain.ts    canonical domain model
+docs/              architecture, providers, data model, roadmap, security, licensing, decisions
+```
+
+See [`docs/`](docs) for the full engineering documentation, including the ADR
+log in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+
+## Production direction
+
+The local build uses in-memory caching and a mock-fallback layer. The interfaces
+(`CacheStore`, `ProviderDefinition`, `ProviderResult`) are designed so the same
+call sites can later be backed by Redis, Postgres/PostGIS, a queue and an
+SSE/WebSocket delta channel without touching rendering code. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).

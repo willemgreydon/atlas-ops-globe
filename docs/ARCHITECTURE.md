@@ -1,5 +1,19 @@
 # Architecture for detail-grade global situational awareness
 
+> **Implemented today (Phase 1–2).** The sections below describe the full target
+> architecture. What currently ships: a Next.js client (Cesium/Resium globe +
+> Context store), server API routes that return a uniform `ProviderResult`
+> envelope, a provider framework (`lib/core/provider.ts`) with per-source Zod
+> validation, provenance, an in-memory `CacheStore`, an explainable confidence
+> engine, and structured JSON logging. The production data stores, queue and
+> streaming layers below are **interfaces to grow into**, not yet wired — the
+> call sites (`CacheStore`, `ProviderDefinition`) are shaped so Redis/Postgres/
+> SSE can drop in without changing rendering code. See `docs/ROADMAP.md`.
+>
+> Key modules: `lib/core/{provider,cache,confidence,provenance,geo,id,logger}.ts`,
+> `lib/providers/*`, `stores/app-store.tsx`, `components/{globe,layout,panels,search}`.
+
+
 ## 1. Client
 
 Next.js web app with CesiumJS/Resium. Render only a viewport-relevant subset of entities. Use clustering and progressive detail: country heatmap at planet scale, event clusters at regional scale, individual aircraft/vessels only after zoom thresholds.
