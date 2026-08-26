@@ -98,7 +98,21 @@ Executed the "immediate slice". All four gates green after each step (`typecheck
 | **2.2** Visibility gate | ✅ done | `pollWhileVisible()` helper — pauses all feed + vault polling while the tab is hidden, refetches on return. Both hooks migrated. | `app-store.tsx` |
 | **2.4** Bounded cache | ✅ done | `MemoryCache` is now a bounded LRU (500 entries, delete-oldest + reorder-on-read). Closes the memory-exhaustion vector on `/api/news`/`/api/country`. | `cache.ts` + 3 tests |
 
-**Not done in this slice (deliberately deferred to a focused pass):** P0-2/P0-4 relationship & record-type provenance persistence (Tier 1.3 — touches many upsert paths, needs its own tested migration); P1-1/1.2/1.3 provider-framework & registry convergence; all Tier 2.1/2.3/3+ (need the perf-capture harness first). E2E smoke deferred if the sandbox cannot launch a browser.
+**Not done in slice 1 (deliberately deferred):** P0-2/P0-4 provenance persistence (done in pass 2 below); P1-1/1.2/1.3 provider-framework & registry convergence; all Tier 2.1/2.3/3+ (need the perf-capture harness first).
+
+## Remediation log — pass 2 (2026-08-26): provenance persistence (Tier 1.3)
+
+Closed the two remaining trust P0s. Gates green (`typecheck` 0 · `lint` 0 · `test` **123** · `build` 0); e2e 10/10 unaffected.
+
+| Item | Status | What shipped | Evidence |
+|---|---|---|---|
+| **P0-2** Relationship provenance dropped | ✅ done | `enrich.relate()` now synthesizes honest lineage: every edge is `atlas-enrich`-derived from its `from` record (whose own provenance chains to the origin provider) — **zero caller changes** since all current edges derive from `from`. `upsertRelationship` persists it. | `enrich.ts`, `repositories.ts:78`; test asserts trace |
+| **P0-4** Provenance for 5/15 record types | ✅ done | Added `insertProvenance()` to the 5 upserts that stored provenance inline-only: space, economic, sanction, weather, market. (Country/person/org already persisted via `upsertEntity`.) | `repositories.ts` ×5 |
+| Lineage read path (§9) | ✅ done | `listProvenance(subjectId)` + `GET /api/intelligence/provenance?subject=<id>` — a client can now trace "why does Atlas believe this?". Verified against the live DB. | `queries.ts`, new route |
+
+**Tests added (+3):** `intel/provenance` — asserts relationships and all previously-uncovered record types now persist traceable provenance, and that empty provenance is never fabricated.
+
+**Note:** the fix persists provenance **going forward**; the live DB's existing 413 relationships / 19k sanctions / 3.9k space objects backfill on the next `pnpm intel:sync` (no destructive migration performed, per §43).
 
 ## Explicitly deferred (do NOT build yet — §39)
 

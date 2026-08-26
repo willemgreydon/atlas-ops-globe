@@ -203,6 +203,21 @@ export function getCountryProfile(code: string): Record<string, unknown> | null 
   return { ...country, indicators, current: { events, news } };
 }
 
+/**
+ * Provenance lineage for any vault subject (record id or relationship id).
+ * Powers the "why does Atlas believe this?" trace (§9): displayed statement →
+ * these provenance rows → provider record → source.
+ */
+export function listProvenance(subjectId: string): Record<string, unknown>[] {
+  return getDb().prepare(
+    `SELECT provider, dataset, provider_record_id AS providerRecordId, source_url AS sourceUrl,
+       observed_at AS observedAt, published_at AS publishedAt, retrieved_at AS retrievedAt,
+       license, attribution, raw_hash AS rawHash, pipeline, pipeline_version AS pipelineVersion,
+       confidence
+     FROM provenance WHERE subject_id = ? ORDER BY retrieved_at DESC`,
+  ).all(subjectId) as Record<string, unknown>[];
+}
+
 export function fullTextSearch(table: "fts_news" | "fts_events", query: string, limit = 25): Record<string, unknown>[] {
   // FTS5 MATCH; sanitize to a prefix-safe token query.
   const safe = query.replace(/["']/g, " ").trim();

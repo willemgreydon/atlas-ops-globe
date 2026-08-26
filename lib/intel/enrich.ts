@@ -1,5 +1,6 @@
 import { stableId } from "@/lib/core/id";
 import { upsertRelationship } from "./repositories";
+import { prov } from "./provenance";
 import { IdOf } from "./ids";
 import type { RelationshipBasis, RelationType } from "./ontology";
 import type { DatabaseSync } from "node:sqlite";
@@ -18,10 +19,14 @@ export function relate(
   db?: DatabaseSync,
 ): void {
   const id = stableId("rel", from, type, to);
-  upsertRelationship(
-    { id, from, type, to, basis, confidence, provenance: [] },
-    db,
-  );
+  // Every edge is DERIVED by this pipeline from the `from` record, whose own
+  // provenance chains back to the origin provider. Recording that lineage means
+  // a relationship is never an unattributed assertion (audit P0-2): an inspector
+  // can trace edge → source record → provider.
+  const provenance = [
+    prov({ provider: "atlas-enrich", dataset: "relationships", providerRecordId: from, pipeline: "enrich", confidence }),
+  ];
+  upsertRelationship({ id, from, type, to, basis, confidence, provenance }, db);
 }
 
 /** article OCCURRED_IN / MENTIONS country (reported basis — from source metadata). */

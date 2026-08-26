@@ -75,6 +75,7 @@ export function upsertRelationship(r: VaultRelationship, db = getDb()): void {
        confidence=excluded.confidence, provenance=excluded.provenance`,
   ).run(r.id, r.from, r.type, r.to, r.basis, r.validFrom ?? null, r.validTo ?? null,
     r.confidence, J(r.provenance), now());
+  if (r.provenance?.length) insertProvenance(db, r.id, r.provenance);
 }
 
 // --------------------------------------------------------------------------
@@ -148,6 +149,7 @@ export function upsertSpaceObject(s: VaultSpaceObject, db = getDb()): void {
     s.objectType ?? null, s.launchDate ?? null, s.tleLine1 ?? null, s.tleLine2 ?? null,
     s.epoch ?? null, s.inclinationDeg ?? null, s.periodMin ?? null, s.apogeeKm ?? null,
     s.perigeeKm ?? null, s.source, J(s.provenance), now());
+  if (s.provenance?.length) insertProvenance(db, s.id, s.provenance);
 }
 
 // --------------------------------------------------------------------------
@@ -160,6 +162,7 @@ export function upsertEconomicObs(o: VaultEconomicObs, db = getDb()): void {
      ON CONFLICT(id) DO UPDATE SET value=excluded.value, provenance=excluded.provenance`,
   ).run(o.id, o.countryCode, o.indicator, o.label, o.unit ?? null, o.frequency ?? null,
     o.period, o.value ?? null, o.provider, J(o.provenance));
+  if (o.provenance?.length) insertProvenance(db, o.id, o.provenance);
 }
 
 // --------------------------------------------------------------------------
@@ -220,6 +223,7 @@ export function upsertSanction(s: VaultSanction, db = getDb()): void {
   ).run(s.id, s.subjectType, null, s.name, J(s.aliases), s.program ?? null, s.authority,
     s.jurisdiction ?? null, s.listedAt ?? null, now(), J({ ...s.identifiers, remarks: s.remarks }),
     s.source, J(s.provenance));
+  if (s.provenance?.length) insertProvenance(db, s.id, s.provenance);
 }
 
 // --------------------------------------------------------------------------
@@ -233,6 +237,7 @@ export function upsertWeatherObs(o: VaultWeatherObs, db = getDb()): void {
        unit=excluded.unit, provenance=excluded.provenance`,
   ).run(o.id, o.lat, o.lon, o.place ?? null, o.countryCode ?? null, o.observedAt, o.variable,
     o.value ?? null, o.unit ?? null, o.provider, J(o.provenance));
+  if (o.provenance?.length) insertProvenance(db, o.id, o.provenance);
 }
 
 // --------------------------------------------------------------------------
@@ -246,6 +251,7 @@ export function upsertMarketObs(o: VaultMarketObs, db = getDb()): void {
        change_pct=excluded.change_pct, latency_class=excluded.latency_class, provenance=excluded.provenance`,
   ).run(o.id, o.symbol, o.name ?? null, o.assetClass, o.ts, o.price ?? null, o.change ?? null,
     o.changePct ?? null, o.currency ?? null, o.latencyClass, o.provider, J(o.provenance));
+  if (o.provenance?.length) insertProvenance(db, o.id, o.provenance);
 }
 
 // --------------------------------------------------------------------------
