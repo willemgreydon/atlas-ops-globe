@@ -25,7 +25,7 @@ for (const c of countryCentroids) {
 
 /** Common name/code variants → ISO2. Extend as coverage gaps surface. */
 const ALIASES: Record<string, string> = {
-  "usa": "US", "u.s.": "US", "u.s.a.": "US", "united states of america": "US", "america": "US",
+  "usa": "US", "u.s.": "US", "u.s.a.": "US", "united states": "US", "united states of america": "US", "america": "US",
   "uk": "GB", "u.k.": "GB", "britain": "GB", "great britain": "GB", "england": "GB",
   "russia": "RU", "russian federation": "RU",
   "south korea": "KR", "republic of korea": "KR", "korea": "KR",
@@ -75,6 +75,27 @@ export function extractCountryMentions(text: string): ResolvedCountry[] {
     if (m.re.test(text)) found.add(m.iso2);
   }
   return [...found].map((iso2) => resolveCountry(iso2)).filter((c): c is ResolvedCountry => !!c);
+}
+
+/**
+ * Best geographic anchor for a news headline. Prefers the country mentioned
+ * *earliest* in the title (headlines lead with their subject), falling back to
+ * the article's source country. Returns null when neither resolves — we plot
+ * nothing rather than invent a location (mission: honest provenance).
+ */
+export function locateNews(title: string, sourceCountry?: string | null): ResolvedCountry | null {
+  const mentions = extractCountryMentions(title);
+  if (mentions.length > 0) {
+    const lower = title.toLowerCase();
+    let best = mentions[0];
+    let bestIdx = Infinity;
+    for (const c of mentions) {
+      const idx = lower.indexOf(c.name.toLowerCase());
+      if (idx >= 0 && idx < bestIdx) { bestIdx = idx; best = c; }
+    }
+    return best;
+  }
+  return resolveCountry(sourceCountry ?? null);
 }
 
 /** Nearest country to a point (centroid distance). For geolocating events. */

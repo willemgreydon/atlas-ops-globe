@@ -5,6 +5,7 @@ import { stableId } from "@/lib/core/id";
 import type { ProviderDefinition } from "@/lib/core/provider";
 import type { NewsItem } from "@/types/domain";
 import { mockNews } from "@/lib/mock";
+import { locateNews } from "@/lib/intel/resolve";
 
 /**
  * GDELT DOC 2.0 — global news article discovery.
@@ -46,17 +47,30 @@ export async function fetchGdeltNews(query = DEFAULT_QUERY): Promise<NewsItem[]>
   // GDELT returns HTTP 200 with a *plain-text* body when rate-limiting or
   // rejecting a query, so we read text first and detect that before parsing.
   const raw = await fetchGdeltText(`https://api.gdeltproject.org/api/v2/doc/doc?${qs}`);
-  const data = Schema.parse(raw);
+  return normalizeGdelt(raw);
+}
 
+/**
+ * Pure GDELT payload → `NewsItem[]`. Extracted from the fetch so the mapping —
+ * especially the geolocation that puts world news on the globe — is unit-tested
+ * without a network round-trip.
+ */
+export function normalizeGdelt(raw: unknown): NewsItem[] {
+  const data = Schema.parse(raw);
   return (data.articles ?? []).map((a) => {
     const publishedAt = parseSeenDate(a.seendate);
+    // Geolocate for the globe: the country the story is *about* (from the
+    // headline), else the article's source country. GDELT gives no coordinates,
+    // so without this world news never plots on the globe.
+    const country = locateNews(a.title, a.sourcecountry);
     return {
       id: stableId("news", a.url),
       title: a.title,
       url: a.url,
       source: a.domain,
       publishedAt,
-      countryCode: a.sourcecountry,
+      countryCode: country?.iso2 ?? a.sourcecountry,
+      location: country?.point,
       provenance: makeProvenance({
         provider: "gdelt",
         providerRecordId: a.url,

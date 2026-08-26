@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractCountryMentions, nearestCountry, resolveCountry } from "@/lib/intel/resolve";
+import { extractCountryMentions, locateNews, nearestCountry, resolveCountry } from "@/lib/intel/resolve";
 
 describe("country resolution", () => {
   it("resolves ISO2, ISO3 and names", () => {
@@ -39,5 +39,29 @@ describe("country resolution", () => {
   it("finds the nearest country to a point", () => {
     const near = nearestCountry({ lat: 48.2, lon: 16.37 }); // Vienna
     expect(near?.iso2).toBe("AT");
+  });
+});
+
+describe("news geolocation", () => {
+  it("anchors a headline to the country it is about (with a real point)", () => {
+    const loc = locateNews("Ukraine and Russia resume grain talks", "US");
+    expect(loc?.iso2).toBe("UA"); // subject country, not the US source
+    expect(Number.isFinite(loc?.point.lat)).toBe(true);
+    expect(Number.isFinite(loc?.point.lon)).toBe(true);
+  });
+
+  it("prefers the country mentioned earliest in the headline", () => {
+    expect(locateNews("Germany pressures France on defense spending")?.iso2).toBe("DE");
+    expect(locateNews("France and Germany at odds over budget")?.iso2).toBe("FR");
+  });
+
+  it("falls back to the source country when the headline names none", () => {
+    expect(locateNews("Local markets rally on earnings", "JP")?.iso2).toBe("JP");
+    expect(locateNews("Quarterly report published", "United States")?.iso2).toBe("US");
+  });
+
+  it("returns null rather than inventing a location", () => {
+    expect(locateNews("Quarterly report published", null)).toBeNull();
+    expect(locateNews("", undefined)).toBeNull();
   });
 });

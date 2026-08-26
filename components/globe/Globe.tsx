@@ -762,9 +762,23 @@ function addEvent(ds: CustomDataSource, e: WorldEvent) {
   selectionMap.set(ent, { kind: "event", id: e.id });
 }
 
+/** Deterministic ±~0.7° spread from a stable id, so many same-country articles
+ *  (all anchored to one country centroid) fan into a readable, clickable cluster
+ *  instead of stacking on a single pixel. Stable across polls → no jitter jump. */
+function scatter(id: string, lat: number): { lon: number; lat: number } {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const a = ((h >>> 0) % 1000) / 1000;
+  const b = ((h >>> 10) % 1000) / 1000;
+  const dLat = (a - 0.5) * 1.4;
+  const dLon = (b - 0.5) * 1.4 / Math.max(0.2, Math.cos((lat * Math.PI) / 180));
+  return { lon: dLon, lat: dLat };
+}
+
 function addNews(ds: CustomDataSource, n: NewsItem) {
+  const off = scatter(n.id, n.location!.lat);
   const ent = ds.entities.add({
-    position: Cartesian3.fromDegrees(n.location!.lon, n.location!.lat, 0),
+    position: Cartesian3.fromDegrees(n.location!.lon + off.lon, n.location!.lat + off.lat, 0),
     point: {
       pixelSize: 8,
       color: Color.fromCssColorString(LAYER_BY_ID.news.color).withAlpha(0.9),
