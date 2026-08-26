@@ -11,10 +11,17 @@ export default function LayerManager() {
   const app = useApp();
 
   const feedStatus = (feed?: string): DataStatus | undefined => {
-    if (feed === "aircraft") return app.aircraft.meta?.status;
-    if (feed === "events") return app.events.meta?.status;
-    if (feed === "news") return app.news.meta?.status;
-    return undefined;
+    // Cover every feed, not just aircraft/events/news, so each active layer row
+    // shows an honest liveness dot (was silently blank for maritime/weather/space).
+    switch (feed) {
+      case "aircraft": return app.aircraft.meta?.status;
+      case "events": return app.events.meta?.status;
+      case "news": return app.news.meta?.status;
+      case "vessels": return app.vessels.meta?.status;
+      case "weather": return app.weather.meta?.status;
+      case "satellites": return app.satellites.meta?.status;
+      default: return undefined;
+    }
   };
 
   return (

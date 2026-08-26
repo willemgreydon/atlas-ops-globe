@@ -28,9 +28,9 @@ export const MODES: ModeDef[] = [
   { id: "aviation", label: "Aviation", operational: true, defaultLayers: ["countries", "aircraft"], blurb: "Live ADS-B aircraft positions from OpenSky." },
   { id: "disasters", label: "Disasters", operational: true, defaultLayers: ["countries", "earthquakes", "naturalEvents"], blurb: "Earthquakes (USGS) and natural events (NASA EONET)." },
   { id: "news", label: "News", operational: true, defaultLayers: ["countries", "news"], blurb: "Global news discovery via GDELT." },
-  { id: "maritime", label: "Maritime", operational: false, defaultLayers: ["countries", "maritime"], blurb: "AIS vessel tracking — provider integration planned." },
-  { id: "cyber", label: "Cyber", operational: false, defaultLayers: ["countries", "cyber"], blurb: "Exploited vulnerabilities — CISA KEV/NVD planned." },
-  { id: "space", label: "Space", operational: false, defaultLayers: ["countries", "space"], blurb: "Satellites & orbits — CelesTrak/SGP4 planned." },
+  { id: "maritime", label: "Maritime", operational: true, defaultLayers: ["countries", "maritime"], blurb: "AIS vessel tracking (MarineTraffic) — needs an API key; offline until set." },
+  { id: "cyber", label: "Cyber", operational: false, defaultLayers: ["countries", "cyber"], blurb: "Exploited vulnerabilities — CISA KEV/NVD (no globe layer yet)." },
+  { id: "space", label: "Space", operational: true, defaultLayers: ["countries", "space"], blurb: "Live satellites & orbits — CelesTrak TLEs propagated with SGP4." },
 ];
 
 export const MODE_BY_ID = Object.fromEntries(MODES.map((m) => [m.id, m])) as Record<ModeId, ModeDef>;

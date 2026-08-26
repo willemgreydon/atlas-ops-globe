@@ -1,10 +1,13 @@
 /**
- * Provider registry (see docs/LICENSING.md). Every external source we integrate
- * — or plan to — is documented here with its licensing posture so we never
- * assume "publicly accessible" means "freely redistributable".
+ * Provider LICENSING reference (see docs/LICENSING.md). Documents each source's
+ * licensing/redistribution posture so we never assume "publicly accessible"
+ * means "freely redistributable".
  *
- * `status: "active"` providers are wired end-to-end. Others are planned and
- * their controls appear disabled/labelled in the UI (no fake functionality).
+ * ⚠️ NOT the operational source of truth. Implementation status, `enabled`
+ * state and env-var names live in `lib/intel/sources.ts` (`SOURCES`), which the
+ * ingest CLI and `/api/health` use. This file's `status` field is licensing
+ * context only — do not read it for "is this provider wired?" (audit P1-3: the
+ * two lists had drifted and contradicted each other).
  */
 
 export type ProviderStatus = "active" | "planned";

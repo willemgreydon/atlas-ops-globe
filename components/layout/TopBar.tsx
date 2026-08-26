@@ -29,10 +29,18 @@ function overallStatus(...statuses: (DataStatus | undefined)[]): DataStatus {
 export default function TopBar() {
   const app = useApp();
   const clock = useUtcClock();
+  // Every active feed counts toward the header summary — not just aircraft/
+  // events/news (audit P3-2), so the badge can never read LIVE while an active
+  // conflict/maritime/weather feed is offline. Each is gated on its layer.
   const active = [
     app.layers.aircraft ? app.aircraft.meta?.status : undefined,
     app.layers.earthquakes || app.layers.naturalEvents ? app.events.meta?.status : undefined,
     app.layers.news ? app.news.meta?.status : undefined,
+    app.layers.maritime ? app.vessels.meta?.status : undefined,
+    app.layers.weather ? app.weather.meta?.status : undefined,
+    app.layers.conflict ? app.conflict.meta?.status : undefined,
+    app.layers.space ? app.satellites.meta?.status : undefined,
+    app.markets.meta?.status, // markets always poll (ticker)
   ];
   const status = overallStatus(...active);
 

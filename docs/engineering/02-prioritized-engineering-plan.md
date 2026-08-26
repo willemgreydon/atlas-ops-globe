@@ -114,6 +114,19 @@ Closed the two remaining trust P0s. Gates green (`typecheck` 0 · `lint` 0 · `t
 
 **Note:** the fix persists provenance **going forward**; the live DB's existing 413 relationships / 19k sanctions / 3.9k space objects backfill on the next `pnpm intel:sync` (no destructive migration performed, per §43).
 
+## Remediation log — pass 3 (2026-08-26): registry & UI trust consistency
+
+Gates green (`typecheck` 0 · `lint` 0 · `test` **123** · `build` 0 · **e2e 10/10**).
+
+| Item | Status | What shipped | Evidence |
+|---|---|---|---|
+| **P1-3** Two contradictory registries; `/api/health` lied | ✅ done | `/api/health` now derives from the single operational SoT (`lib/intel/sources.ts` `SOURCES`) — the CLI's registry. `data/provider-registry.ts` demoted to a licensing-reference with a ⚠️ banner. Verified: ACLED env keys now correct (`ACLED_USERNAME/PASSWORD`), celestrak reports `implemented` (old registry falsely said `planned`). | `app/api/health/route.ts`, `data/provider-registry.ts` |
+| **P3-2** Header status ignored 5/8 feeds | ✅ done | `TopBar` `overallStatus` now spans all 8 feeds (each gated on its layer) — the badge can no longer read LIVE while an active conflict/maritime/weather feed is offline. | `TopBar.tsx` |
+| **P3-3** Mode flags contradicted reality | ✅ done (space/maritime) | `space` mode → `operational: true` (live, keyless SGP4); `maritime` → `operational: true` with an honest "needs API key" blurb (integrated, not "planned"). | `modes.ts` |
+| LayerManager liveness dots | ✅ done | `feedStatus` extended to vessels/weather/satellites — layer rows that were silently blank now show an honest dot. | `LayerManager.tsx` |
+
+**Deliberately left (product decision, not a bug to silently flip):** `markets`/`cyber` *layer* `status: "planned"` — these have no globe visualization (markets is a ticker; cyber has data but no globe layer). Flipping them needs a product call on whether they should be globe layers; flagged here rather than guessed.
+
 ## Explicitly deferred (do NOT build yet — §39)
 
 Kubernetes, Kafka, Redis, Postgres/PostGIS-now, Elasticsearch, GraphQL, microservices, vector DBs. The local-first SQLite/FTS5 + in-process architecture is adequate for current and near-term volumes; the plan only asks that storage/query **seams** (3.2, 4.1) be drawn so a future migration doesn't contaminate domain logic. Complexity must earn its place.
