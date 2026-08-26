@@ -499,6 +499,12 @@ export default function Globe() {
     conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
   });
   useEffect(() => {
+    // Deliberate latest-value ref: the focus/hover effects read these rows to
+    // resolve a selection to coordinates WITHOUT taking them as dependencies
+    // (which would re-fly the camera on every poll). The React Compiler lint
+    // flags writing reactive values into a cross-effect ref; that is exactly the
+    // escape hatch intended here, so it is suppressed at this single site.
+    // eslint-disable-next-line react-hooks/immutability
     feedsRef.current = {
       aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
       conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
@@ -519,6 +525,11 @@ export default function Globe() {
     if (!ready || !cam || !viewer) return;
     const rm = prefersReducedMotion();
 
+    // `viewer.trackedEntity = …` IS Cesium's entity-tracking API — following a
+    // moving object is impossible without this mutation. The React Compiler lint
+    // treats mutating a ref-derived object inside a selection-keyed effect as
+    // forbidden; it is an unavoidable imperative Cesium call, suppressed here.
+    // eslint-disable-next-line react-hooks/immutability
     const untrack = () => { viewer.trackedEntity = undefined; cam.setTracking(false); };
     const follow = (ent: CesiumEntity, viewFrom: Cartesian3) => {
       ent.viewFrom = new ConstantProperty(viewFrom);

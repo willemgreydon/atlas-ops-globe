@@ -197,23 +197,57 @@ function defaultLayerVisibility(mode: ModeId): Record<LayerId, boolean> {
   return Object.fromEntries(LAYERS.map((l) => [l.id, on.has(l.id)])) as Record<LayerId, boolean>;
 }
 
+/** Vault freshness state → honest {@link DataStatus}. Replaces the old blanket
+ *  "vault ⇒ live" so a stale/aging feed is never shown as LIVE (audit P0-1). */
+const FRESHNESS_STATUS: Record<string, { status: DataStatus; stale: boolean }> = {
+  fresh: { status: "live", stale: false },
+  aging: { status: "delayed", stale: false },
+  stale: { status: "cached", stale: true },
+  unknown: { status: "offline", stale: false },
+};
+
 async function fetchFeed<T>(url: string, map?: (raw: Record<string, unknown>) => T): Promise<{ rows: T[]; meta: FeedMeta }> {
   const res = await fetch(url, { cache: "no-store" });
   const json = await res.json();
   // Live-provider routes return { rows, status, ... }; vault routes return
-  // { data, page, status?, provider? }. Handle both shapes uniformly.
+  // { data, page, freshness? }. Handle both shapes uniformly.
   const raw: Record<string, unknown>[] = json.rows ?? json.data ?? [];
   const rows: T[] = map ? raw.map(map) : (raw as T[]);
+  const fresh = json.freshness as { state?: string; latestObservedAt?: string | null } | undefined;
+  const derived = fresh ? FRESHNESS_STATUS[fresh.state ?? "unknown"] : undefined;
   const meta: FeedMeta = {
-    status: json.status ?? (json.data !== undefined ? "live" : "offline"),
+    // Explicit provider status (live-fetch routes) wins; otherwise derive from
+    // data freshness; only then fall back to the legacy shape heuristic.
+    status: json.status ?? derived?.status ?? (json.data !== undefined ? "live" : "offline"),
     source: json.source ?? json.provider ?? "vault",
     cached: !!json.cached,
-    stale: !!json.stale,
+    stale: !!json.stale || !!derived?.stale,
     fetchedAt: json.fetchedAt ?? new Date().toISOString(),
     error: json.error,
     count: json.count ?? json.page?.count ?? rows.length,
   };
   return { rows, meta };
+}
+
+/**
+ * Run `load` now (if the tab is visible) then on an interval, pausing entirely
+ * while the tab is hidden and refetching once on return to the foreground.
+ * Audit P2-1: a backgrounded tab must not keep polling upstream feeds and
+ * burning provider rate limits. Returns a cleanup that stops the timer and
+ * detaches the visibility listener.
+ */
+function pollWhileVisible(load: () => void, intervalMs: number): () => void {
+  const hidden = () => typeof document !== "undefined" && document.hidden;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const start = () => { if (timer === undefined) { load(); timer = setInterval(load, intervalMs); } };
+  const stop = () => { if (timer !== undefined) { clearInterval(timer); timer = undefined; } };
+  const onVisibility = () => { if (hidden()) stop(); else start(); };
+  if (!hidden()) start();
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
+  return () => {
+    stop();
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+  };
 }
 
 /** Poll the aggregated vault snapshot (cheap, local SQLite). */
@@ -230,9 +264,8 @@ function useVaultSnapshot(): VaultSnapshot | null {
         /* vault not populated yet — leave null, UI shows a hint */
       }
     };
-    load();
-    const t = setInterval(load, POLL_MS.vault);
-    return () => { live = false; clearInterval(t); };
+    const stop = pollWhileVisible(() => { void load(); }, POLL_MS.vault);
+    return () => { live = false; stop(); };
   }, []);
   return snap;
 }
@@ -266,13 +299,14 @@ function useFeed<T>(url: string, intervalMs: number, active: boolean, map?: (raw
           }));
       }
     };
-    load();
-    const t = setInterval(load, intervalMs);
+    const stop = pollWhileVisible(() => { void load(); }, intervalMs);
     return () => {
       live = false;
-      clearInterval(t);
+      stop();
     };
-  }, [url, intervalMs, active]);
+    // `map` is always a stable module-level fn (or undefined) at every call
+    // site, so including it never re-subscribes — but it guards future callers.
+  }, [url, intervalMs, active, map]);
   return state;
 }
 

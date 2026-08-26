@@ -5,6 +5,7 @@ import { loadSgp4, subpoint } from "@/lib/sgp4-client";
 import { useApp, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { operatorFromCallsign } from "@/data/airlines-icao";
 import StatusBadge from "@/components/common/StatusBadge";
+import { safeHttpUrl } from "@/lib/safe-url";
 import type { AircraftState, DataStatus, NewsItem, Provenance, WorldEvent } from "@/types/domain";
 
 interface VaultCountry {
@@ -107,10 +108,10 @@ function ProvenanceBlock({ p }: { p?: Provenance }) {
       <Field label="Retrieved" value={since(p.retrievedAt)} />
       {p.confidence != null && <Field label="Confidence" value={`${Math.round(p.confidence * 100)}%`} />}
       <Field label="Transform" value={p.transformationVersion} />
-      {p.sourceUrl && (
+      {safeHttpUrl(p.sourceUrl) && (
         <div className="field">
           <label>Source</label>
-          <a href={p.sourceUrl} target="_blank" rel="noreferrer noopener">open ↗</a>
+          <a href={safeHttpUrl(p.sourceUrl)} target="_blank" rel="noreferrer noopener">open ↗</a>
         </div>
       )}
     </details>
@@ -176,8 +177,8 @@ function NewsView({ n }: { n: NewsItem }) {
         <Field label="Published" value={since(n.publishedAt)} />
         <Field label="Country" value={n.countryCode} />
       </div>
-      {n.url && (
-        <a className="link-btn" href={n.url} target="_blank" rel="noreferrer noopener">Read article ↗</a>
+      {safeHttpUrl(n.url) && (
+        <a className="link-btn" href={safeHttpUrl(n.url)} target="_blank" rel="noreferrer noopener">Read article ↗</a>
       )}
       <ProvenanceBlock p={n.provenance} />
     </>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listEvents, parseBbox, parsePage, parseSince } from "@/lib/intel/queries";
+import { attachFreshness } from "@/lib/intel/freshness";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,5 +13,5 @@ export function GET(req: NextRequest) {
     bbox: parseBbox(sp.get("bbox")),
     since: parseSince(sp.get("since")),
   });
-  return NextResponse.json(result);
+  return NextResponse.json(attachFreshness(result, "disaster", "occurredAt"));
 }

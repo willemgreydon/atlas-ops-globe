@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { safeHttpUrl } from "@/lib/safe-url";
 
 /**
  * Trending Entities — the persons and organizations most mentioned across the
@@ -37,8 +38,9 @@ function Row({ e }: { e: Entity }) {
       <span className="ent-count">{e.mentions}</span>
     </>
   );
-  return e.wikipediaUrl ? (
-    <a className="ent-row" href={e.wikipediaUrl} target="_blank" rel="noreferrer noopener" title="Open Wikipedia">{inner}</a>
+  const wiki = safeHttpUrl(e.wikipediaUrl);
+  return wiki ? (
+    <a className="ent-row" href={wiki} target="_blank" rel="noreferrer noopener" title="Open Wikipedia">{inner}</a>
   ) : (
     <div className="ent-row static">{inner}</div>
   );
