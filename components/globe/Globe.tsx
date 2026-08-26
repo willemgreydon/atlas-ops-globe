@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArcType,
   Cartesian2,
   Cartesian3,
   Cartographic,
   Color,
-  ConstantPositionProperty,
+  ConstantProperty,
   CustomDataSource,
   GeoJsonDataSource,
   Ion,
@@ -21,9 +22,51 @@ import {
 import { ImageryLayer, Viewer, type CesiumComponentRef } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { loadSgp4 } from "@/lib/sgp4-client";
-import { useApp, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import type { AircraftState, NewsItem, Severity, WorldEvent } from "@/types/domain";
+import { configureScene } from "@/lib/globe/scene";
+import { GlobePerformanceManager } from "@/lib/globe/performance";
+import { GlobeCameraController } from "@/lib/globe/camera";
+import { setGlobeRuntime } from "@/lib/globe/runtime";
+import { LodController } from "@/lib/globe/lod";
+import { QUALITY_PRESETS } from "@/lib/globe/quality";
+import { MovingLayer } from "@/lib/globe/render/motion";
+import { createAircraftLayer, createVesselLayer, createSatelliteLayer, satColor, DEPTH_TEST_DISABLE_M } from "@/lib/globe/render/layers";
+import { OrbitTrail } from "@/lib/globe/render/orbits";
+import { FocusOverlay } from "@/lib/globe/render/focus";
+import { TerrainController } from "@/lib/globe/terrain";
+import { CelestialEnvironment } from "@/lib/globe/render/celestial";
+import { EffectsLayer } from "@/lib/globe/render/effects";
+import { EntityTrail } from "@/lib/globe/render/trails";
+import { CoverageCone } from "@/lib/globe/render/coverage";
+import { setHover, type HoverInfo } from "@/lib/globe/hover";
+
+type Sgp4 = Awaited<ReturnType<typeof loadSgp4>>;
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+
+/** Current sub-satellite geodetic point from a TLE (for focus fly-to). */
+function subSatellitePoint(sat: Sgp4, row: SatelliteRow): { lon: number; lat: number; alt: number } | null {
+  if (!row.tle1 || !row.tle2) return null;
+  try {
+    const rec = sat.twoline2satrec(row.tle1, row.tle2);
+    if (rec.error) return null;
+    const date = new Date();
+    const pv = sat.propagate(rec, date);
+    if (!pv || typeof pv.position === "boolean" || !pv.position) return null;
+    const geo = sat.eciToGeodetic(pv.position, sat.gstime(date));
+    const lon = sat.degreesLong(geo.longitude);
+    const lat = sat.degreesLat(geo.latitude);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+    return { lon, lat, alt: geo.height * 1000 };
+  } catch {
+    return null;
+  }
+}
 
 if (typeof window !== "undefined") {
   const g = window as typeof window & { CESIUM_BASE_URL?: string };
@@ -49,14 +92,6 @@ function arrowCanvas(color: string): HTMLCanvasElement {
   return c;
 }
 
-// Colour satellites by orbit regime (from period in minutes).
-function satColor(periodMin: number | null): Color {
-  if (periodMin == null) return Color.fromCssColorString("#c0c8d4");
-  if (periodMin < 128) return Color.fromCssColorString("#65f6c7"); // LEO
-  if (periodMin < 800) return Color.fromCssColorString("#54c7ff"); // MEO
-  return Color.fromCssColorString("#ffd166"); // GEO / HEO
-}
-
 function severityColor(sev: Severity): Color {
   switch (sev) {
     case "critical": return Color.fromCssColorString("#ff5a62");
@@ -64,6 +99,22 @@ function severityColor(sev: Severity): Color {
     case "watch": return Color.fromCssColorString("#54c7ff");
     default: return Color.fromCssColorString("#65f6c7");
   }
+}
+
+// Camera follow offsets in the entity's East-North-Up frame (x=E, y=N, z=up).
+// Pulled back + tilted down so the object and its trail read clearly (§19).
+const AIRCRAFT_VIEWFROM = new Cartesian3(0, -120_000, 280_000); // ~305 km, ~67° down
+const VESSEL_VIEWFROM = new Cartesian3(0, -22_000, 52_000); // ~57 km, close inspection
+
+/** Follow distance for a satellite scales with its altitude so LEO and GEO both frame well. */
+function satelliteViewFrom(s: SatelliteRow | undefined, sat: Sgp4 | null): Cartesian3 {
+  let alt = 700_000;
+  if (s && sat && s.tle1 && s.tle2) {
+    const g = subSatellitePoint(sat, s);
+    if (g) alt = g.alt;
+  }
+  const dist = Math.min(6_000_000, Math.max(1_200_000, alt * 1.4));
+  return new Cartesian3(0, -dist * 0.4, dist * 0.9);
 }
 
 export default function Globe() {
@@ -91,11 +142,69 @@ export default function Globe() {
   const selectRef = useRef(app.select);
   useEffect(() => { selectRef.current = app.select; }, [app.select]);
 
-  // --- scene setup + picking (click + hover) --------------------------------
+  // Imperative managers (mission §112 §113) — created once the viewer exists,
+  // owned outside React state so the compiler never reconciles them per frame.
+  const perfRef = useRef<GlobePerformanceManager | null>(null);
+  const camRef = useRef<GlobeCameraController | null>(null);
+  const focusRef = useRef<FocusOverlay | null>(null);
+  const celestialRef = useRef<CelestialEnvironment | null>(null);
+  const effectsRef = useRef<EffectsLayer | null>(null);
+  const trailRef = useRef<EntityTrail | null>(null);
+  const coneRef = useRef<CoverageCone | null>(null);
+  const terrainRef = useRef<TerrainController | null>(null);
+  const lodRef = useRef<LodController | null>(null);
+  // Latest scene config, read by the create-once bootstrap without re-running it.
+  const configRef = useRef({ quality: app.quality, atmosphere: app.atmosphere, lighting: app.lighting, autoQuality: app.autoQuality, environment: app.environment, terrain: app.terrain });
+  useEffect(() => {
+    configRef.current = { quality: app.quality, atmosphere: app.atmosphere, lighting: app.lighting, autoQuality: app.autoQuality, environment: app.environment, terrain: app.terrain };
+  }, [app.quality, app.atmosphere, app.lighting, app.autoQuality, app.environment, app.terrain]);
+
+  // --- engine bootstrap: scene, managers, runtime, picking ------------------
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
     if (!ready || !viewer) return;
-    configureScene(viewer);
+    const cfg = configRef.current;
+
+    // Premium providers (terrain/photorealistic) require an ion token; the app
+    // works fully without one (mission §164). Set it if configured.
+    if (process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN) Ion.defaultAccessToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
+
+    configureScene(viewer, { quality: cfg.quality, atmosphere: cfg.atmosphere, lighting: cfg.lighting });
+
+    const camera = new GlobeCameraController(viewer);
+    const performance = new GlobePerformanceManager(viewer, cfg.quality);
+    performance.setAuto(cfg.autoQuality);
+    performance.start();
+    const focus = new FocusOverlay(viewer);
+    // Cinematic environment + effect vocabulary (mission §8 §34 §22 §53).
+    const celestial = new CelestialEnvironment(viewer);
+    celestial.configure({ enabled: cfg.environment, quality: QUALITY_PRESETS[cfg.quality] });
+    const effects = new EffectsLayer(viewer);
+    const trail = new EntityTrail(viewer, { maxSamples: QUALITY_PRESETS[cfg.quality].trailSamples });
+    const cone = new CoverageCone(viewer);
+    // Premium surface (terrain / photorealistic 3D tiles), gated by an ion token.
+    const terrain = new TerrainController(viewer);
+    void terrain.apply(cfg.terrain);
+    // LOD + declutter: altitude-driven layer visibility + label budget (§14 §64 §104).
+    const lod = new LodController(viewer);
+    lod.setMaxLabels(QUALITY_PRESETS[cfg.quality].maxLabels);
+    lod.start();
+    camRef.current = camera;
+    perfRef.current = performance;
+    focusRef.current = focus;
+    celestialRef.current = celestial;
+    effectsRef.current = effects;
+    trailRef.current = trail;
+    coneRef.current = cone;
+    terrainRef.current = terrain;
+    lodRef.current = lod;
+    setGlobeRuntime({ viewer, performance, camera, lod });
+
+    // Dev-only selection bridge for diagnostics / e2e probes (mission §117).
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __globeSelect?: (s: Selection) => void }).__globeSelect = (s) => selectRef.current(s);
+    }
+
     const scene = viewer.scene;
     const handler = new ScreenSpaceEventHandler(scene.canvas);
 
@@ -113,18 +222,88 @@ export default function Globe() {
       // A cluster or empty space → zoom toward the clicked point (de-cluster).
       // Uses the ellipsoid pick, never the cluster's entity array (which can be
       // huge and crash the render loop when enumerated).
-      if (picked && !entity) zoomTowardCursor(viewer, m.position);
+      if (picked && !entity) {
+        const carto = camera && ellipsoidPick(viewer, m.position);
+        if (carto) camera.zoomTowardCursor(carto);
+      }
     }, ScreenSpaceEventType.LEFT_CLICK);
 
-    // Hover: pointer cursor over anything selectable.
+    // Hover: pointer cursor + identity tooltip over anything selectable (§63).
     handler.setInputAction((m: { endPosition: Cartesian2 }) => {
       const picked = scene.pick(m.endPosition);
       const hit = !!picked && (Array.isArray(picked.id) || picked.id instanceof CesiumEntity);
       scene.canvas.style.cursor = hit ? "pointer" : "default";
+      setHover(hit ? buildHoverInfo(picked, m.endPosition.x, m.endPosition.y, feedsRef.current) : null);
     }, ScreenSpaceEventType.MOUSE_MOVE);
 
-    return () => handler.destroy();
+    return () => {
+      handler.destroy();
+      setHover(null);
+      setGlobeRuntime(null);
+      performance.dispose();
+      camera.dispose();
+      focus.dispose();
+      celestial.dispose();
+      effects.dispose();
+      trail.dispose();
+      cone.dispose();
+      terrain.dispose();
+      lod.dispose();
+      perfRef.current = null;
+      camRef.current = null;
+      focusRef.current = null;
+      celestialRef.current = null;
+      effectsRef.current = null;
+      trailRef.current = null;
+      coneRef.current = null;
+      terrainRef.current = null;
+      lodRef.current = null;
+      if (process.env.NODE_ENV !== "production") {
+        delete (window as unknown as { __globeSelect?: unknown }).__globeSelect;
+      }
+    };
   }, [ready]);
+
+  // --- react to quality / atmosphere / lighting changes ---------------------
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!ready || !viewer) return;
+    configureScene(viewer, { quality: app.quality, atmosphere: app.atmosphere, lighting: app.lighting });
+    perfRef.current?.setCeiling(app.quality);
+    perfRef.current?.setAuto(app.autoQuality);
+    lodRef.current?.setMaxLabels(QUALITY_PRESETS[app.quality].maxLabels);
+  }, [ready, app.quality, app.atmosphere, app.lighting, app.autoQuality]);
+
+  // --- celestial environment (stars/sun/moon/bloom/lens flare) --------------
+  // Runs after the scene effect above so it reads the HDR state that the
+  // atmosphere preset just set, rather than fighting it (mission §8).
+  useEffect(() => {
+    const celestial = celestialRef.current;
+    if (!ready || !celestial) return;
+    celestial.configure({ enabled: app.environment, quality: QUALITY_PRESETS[app.quality] });
+  }, [ready, app.environment, app.quality, app.atmosphere]);
+
+  // --- surface mode: ellipsoid / world terrain / photorealistic tiles (§9) ---
+  // Ion-gated; the controller no-ops to the ellipsoid without a token and owns
+  // `depthTestAgainstTerrain`, so this never fights the scene configurator.
+  useEffect(() => {
+    const terrain = terrainRef.current;
+    if (!ready || !terrain) return;
+    void terrain.apply(app.terrain);
+  }, [ready, app.terrain]);
+
+  // --- disaster / alert shockwave ripples (effect registry) -----------------
+  useEffect(() => {
+    const fx = effectsRef.current;
+    if (!ready || !fx) return;
+    const rows: WorldEvent[] = [];
+    if (app.effects) {
+      if (app.layers.earthquakes || app.layers.naturalEvents) rows.push(...app.events.rows);
+      if (app.layers.conflict) rows.push(...app.conflict.rows);
+    }
+    const q = QUALITY_PRESETS[app.quality];
+    fx.update(rows, { max: q.maxParticleSystems === 0 ? 16 : 48, reducedMotion: prefersReducedMotion() });
+  }, [ready, app.effects, app.layers.earthquakes, app.layers.naturalEvents, app.layers.conflict, app.events.rows, app.conflict.rows, app.quality]);
 
   // --- country borders layer ------------------------------------------------
   useEffect(() => {
@@ -139,27 +318,46 @@ export default function Globe() {
         strokeWidth: 1,
       }).then((loaded) => {
         if (cancelled) return;
+        // Harden against a Cesium tessellation overflow: the 110m country
+        // polygons carry long, near-antipodal edges (Antarctica, Russia) that
+        // make `computeRhumbLineSubdivision` blow up ("Too many properties to
+        // enumerate", crashing the whole render loop) once the camera pulls far
+        // out — e.g. flying to a high-orbit satellite. Forcing geodesic edges
+        // routes around the buggy rhumb path; a coarse granularity bounds the
+        // point count for good measure.
+        for (const ent of loaded.entities.values) {
+          if (ent.polygon) {
+            ent.polygon.arcType = new ConstantProperty(ArcType.GEODESIC);
+            ent.polygon.granularity = new ConstantProperty(CMath.toRadians(1.5));
+          }
+        }
         ds = loaded;
         viewer.dataSources.add(loaded);
+        lodRef.current?.register("countries", loaded);
       });
     }
-    return () => { cancelled = true; if (ds) viewer.dataSources.remove(ds, true); };
+    return () => { cancelled = true; if (ds) { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); } };
   }, [ready, app.layers.countries]);
 
-  // --- aircraft layer -------------------------------------------------------
+  // --- aircraft layer (diff/patch render manager, smooth dead-reckoned motion)
+  const aircraftLayer = useRef<MovingLayer<AircraftState> | null>(null);
+  const aircraftRows = useRef<AircraftState[]>([]);
+  useEffect(() => {
+    aircraftRows.current = app.aircraft.rows;
+    aircraftLayer.current?.update(app.aircraft.rows);
+  }, [app.aircraft.rows]);
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
-    if (!ready || !viewer || !aircraftArrow) return;
-    const ds = new CustomDataSource("aircraft");
-    styleClusters(ds, LAYER_BY_ID.aircraft.color);
-    ds.clustering.pixelRange = 28;
-    ds.clustering.minimumClusterSize = 5;
-    if (app.layers.aircraft) {
-      for (const a of app.aircraft.rows) addAircraft(ds, a, aircraftArrow);
-      viewer.dataSources.add(ds);
-    }
-    return () => { viewer.dataSources.remove(ds, true); };
-  }, [ready, app.layers.aircraft, app.aircraft.rows, aircraftArrow]);
+    if (!ready || !viewer || !aircraftArrow || !app.layers.aircraft) return;
+    const layer = createAircraftLayer(viewer, selectionMap, aircraftArrow);
+    styleClusters(layer.ds, LAYER_BY_ID.aircraft.color);
+    layer.ds.clustering.pixelRange = 28;
+    layer.ds.clustering.minimumClusterSize = 5;
+    layer.mount();
+    layer.update(aircraftRows.current);
+    aircraftLayer.current = layer;
+    return () => { layer.dispose(); aircraftLayer.current = null; };
+  }, [ready, app.layers.aircraft, aircraftArrow]);
 
   // --- events layer (earthquakes + natural events) --------------------------
   useEffect(() => {
@@ -175,8 +373,9 @@ export default function Globe() {
         addEvent(ds, e);
       }
       viewer.dataSources.add(ds);
+      lodRef.current?.register("events", ds);
     }
-    return () => { viewer.dataSources.remove(ds, true); };
+    return () => { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); };
   }, [ready, app.layers.earthquakes, app.layers.naturalEvents, app.events.rows]);
 
   // --- conflict layer (ACLED events from the vault) -------------------------
@@ -187,8 +386,9 @@ export default function Globe() {
     if (app.layers.conflict) {
       for (const e of app.conflict.rows) addEvent(ds, e);
       viewer.dataSources.add(ds);
+      lodRef.current?.register("conflict", ds);
     }
-    return () => { viewer.dataSources.remove(ds, true); };
+    return () => { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); };
   }, [ready, app.layers.conflict, app.conflict.rows]);
 
   // --- news layer -----------------------------------------------------------
@@ -199,24 +399,30 @@ export default function Globe() {
     if (app.layers.news) {
       for (const n of app.news.rows) if (n.location) addNews(ds, n);
       viewer.dataSources.add(ds);
+      lodRef.current?.register("news", ds);
     }
-    return () => { viewer.dataSources.remove(ds, true); };
+    return () => { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); };
   }, [ready, app.layers.news, app.news.rows]);
 
-  // --- maritime layer (vessels) ---------------------------------------------
+  // --- maritime layer (vessels) — diff/patch render manager -----------------
+  const vesselLayer = useRef<MovingLayer<VesselRow> | null>(null);
+  const vesselRows = useRef<VesselRow[]>([]);
+  useEffect(() => {
+    vesselRows.current = app.vessels.rows;
+    vesselLayer.current?.update(app.vessels.rows);
+  }, [app.vessels.rows]);
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
-    if (!ready || !viewer) return;
-    const ds = new CustomDataSource("vessels");
-    styleClusters(ds, LAYER_BY_ID.maritime.color);
-    ds.clustering.pixelRange = 28;
-    ds.clustering.minimumClusterSize = 6;
-    if (app.layers.maritime) {
-      for (const v of app.vessels.rows) addVessel(ds, v);
-      viewer.dataSources.add(ds);
-    }
-    return () => { viewer.dataSources.remove(ds, true); };
-  }, [ready, app.layers.maritime, app.vessels.rows]);
+    if (!ready || !viewer || !app.layers.maritime) return;
+    const layer = createVesselLayer(viewer, selectionMap);
+    styleClusters(layer.ds, LAYER_BY_ID.maritime.color);
+    layer.ds.clustering.pixelRange = 28;
+    layer.ds.clustering.minimumClusterSize = 6;
+    layer.mount();
+    layer.update(vesselRows.current);
+    vesselLayer.current = layer;
+    return () => { layer.dispose(); vesselLayer.current = null; };
+  }, [ready, app.layers.maritime]);
 
   // --- weather layer --------------------------------------------------------
   useEffect(() => {
@@ -226,66 +432,193 @@ export default function Globe() {
     if (app.layers.weather) {
       for (const w of app.weather.rows) addWeather(ds, w);
       viewer.dataSources.add(ds);
+      lodRef.current?.register("weather", ds);
     }
-    return () => { viewer.dataSources.remove(ds, true); };
+    return () => { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); };
   }, [ready, app.layers.weather, app.weather.rows]);
 
-  // --- satellites layer (SGP4-propagated from TLEs) -------------------------
+  // --- satellites layer (SGP4 via render manager, continuous smooth motion) --
+  // satellite.js is code-split; load it once the space layer is first enabled.
+  const [sgp4, setSgp4] = useState<Sgp4 | null>(null);
+  useEffect(() => {
+    if (!app.layers.space || sgp4) return;
+    let cancelled = false;
+    loadSgp4().then((m) => { if (!cancelled) setSgp4(m); });
+    return () => { cancelled = true; };
+  }, [app.layers.space, sgp4]);
+
+  const satelliteLayer = useRef<MovingLayer<SatelliteRow> | null>(null);
+  const satelliteRows = useRef<SatelliteRow[]>([]);
+  const orbitTrail = useRef<OrbitTrail | null>(null);
+  const sgp4Ref = useRef<Sgp4 | null>(null);
+  useEffect(() => { sgp4Ref.current = sgp4; }, [sgp4]);
+  useEffect(() => {
+    satelliteRows.current = app.satellites.rows;
+    satelliteLayer.current?.update(app.satellites.rows);
+  }, [app.satellites.rows]);
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
-    if (!ready || !viewer || !app.layers.space) return;
-    const ds = new CustomDataSource("satellites");
-    const rows = app.satellites.rows;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    let cancelled = false;
-    // satellite.js is loaded lazily (code-split) to keep it out of the main bundle.
-    loadSgp4().then((sat) => {
-      if (cancelled) return;
-      const tracked: { rec: ReturnType<typeof sat.twoline2satrec>; prop: ConstantPositionProperty }[] = [];
-      for (const s of rows) {
-        if (!s.tle1 || !s.tle2) continue;
-        let rec: ReturnType<typeof sat.twoline2satrec>;
-        try { rec = sat.twoline2satrec(s.tle1, s.tle2); } catch { continue; }
-        if (rec.error) continue;
-        const prop = new ConstantPositionProperty();
-        const ent = ds.entities.add({ position: prop, point: {
-          pixelSize: 3.5, color: satColor(s.periodMin ?? null),
-          outlineColor: Color.BLACK.withAlpha(0.4), outlineWidth: 1,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          scaleByDistance: new NearFarScalar(2.0e6, 1.4, 6.0e7, 0.5),
-        } });
-        selectionMap.set(ent, { kind: "satellite", id: s.id });
-        tracked.push({ rec, prop });
+    if (!ready || !viewer || !app.layers.space || !sgp4) return;
+    const layer = createSatelliteLayer(viewer, selectionMap, sgp4);
+    layer.mount();
+    layer.update(satelliteRows.current);
+    satelliteLayer.current = layer;
+    const trail = new OrbitTrail(viewer, sgp4);
+    orbitTrail.current = trail;
+    return () => { layer.dispose(); satelliteLayer.current = null; trail.dispose(); orbitTrail.current = null; };
+  }, [ready, app.layers.space, sgp4]);
+
+  // Latest feed rows, so the focus effect resolves a selection to coordinates
+  // without re-firing (and re-flying the camera) on every background poll.
+  const feedsRef = useRef({
+    aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
+    conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
+  });
+  useEffect(() => {
+    feedsRef.current = {
+      aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
+      conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
+    };
+  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows]);
+
+  // --- focus mode: follow (moving) or fly-to (static) the selection ---------
+  // Moving objects (aircraft/vessel/satellite) are *tracked* (§19): the camera
+  // locks on and follows them, framed by a per-type `viewFrom` offset that sits
+  // far enough back to read the object + its trail. Static points (events/news/
+  // weather) get a one-shot cinematic fly-to. Falls back to fly-to if the live
+  // entity isn't materialized yet (§16 §62).
+  useEffect(() => {
+    const cam = camRef.current;
+    const focus = focusRef.current;
+    const viewer = ref.current?.cesiumElement;
+    const sel = app.selection;
+    if (!ready || !cam || !viewer) return;
+    const rm = prefersReducedMotion();
+
+    const untrack = () => { viewer.trackedEntity = undefined; cam.setTracking(false); };
+    const follow = (ent: CesiumEntity, viewFrom: Cartesian3) => {
+      ent.viewFrom = new ConstantProperty(viewFrom);
+      viewer.trackedEntity = ent;
+      cam.setTracking(true);
+    };
+
+    if (!sel) { untrack(); orbitTrail.current?.hide(); focus?.hide(); return; }
+    const feeds = feedsRef.current;
+    switch (sel.kind) {
+      case "aircraft": {
+        const ent = aircraftLayer.current?.getEntity(sel.id);
+        if (ent) {
+          follow(ent, AIRCRAFT_VIEWFROM);
+          if (ent.position) focus?.showAt(ent.position, { stem: true, reducedMotion: rm });
+        } else {
+          untrack();
+          const a = feeds.aircraft.find((r) => r.id === sel.id);
+          if (a) cam.flyToAircraft(a.position.lon, a.position.lat, a.position.alt ?? 9000);
+        }
+        orbitTrail.current?.hide();
+        break;
       }
-      viewer.dataSources.add(ds);
-      const propagate = () => {
-        const now = new Date();
-        const gmst = sat.gstime(now);
-        for (const { rec, prop } of tracked) {
-          const pv = sat.propagate(rec, now);
-          if (!pv || typeof pv.position === "boolean" || !pv.position) continue;
-          const geo = sat.eciToGeodetic(pv.position, gmst);
-          const lon = sat.degreesLong(geo.longitude);
-          const lat = sat.degreesLat(geo.latitude);
-          if (Number.isFinite(lon) && Number.isFinite(lat)) {
-            prop.setValue(Cartesian3.fromDegrees(lon, lat, geo.height * 1000));
+      case "vessel": {
+        const ent = vesselLayer.current?.getEntity(sel.id);
+        if (ent) {
+          follow(ent, VESSEL_VIEWFROM);
+          if (ent.position) focus?.showAt(ent.position, { reducedMotion: rm });
+        } else {
+          untrack();
+          const v = feeds.vessels.find((r) => r.id === sel.id);
+          if (v) cam.flyToVessel(v.lon, v.lat);
+        }
+        orbitTrail.current?.hide();
+        break;
+      }
+      case "satellite": {
+        const s = feeds.satellites.find((r) => r.id === sel.id);
+        if (s) orbitTrail.current?.show(s);
+        const ent = satelliteLayer.current?.getEntity(sel.id);
+        if (ent) {
+          follow(ent, satelliteViewFrom(s, sgp4Ref.current));
+          if (ent.position) focus?.showAt(ent.position, { stem: true, reducedMotion: rm });
+        } else {
+          untrack();
+          const sat = sgp4Ref.current;
+          if (s && sat && s.tle1 && s.tle2) {
+            const g = subSatellitePoint(sat, s);
+            if (g) cam.flyToSatellite(g.lon, g.lat, g.alt);
           }
         }
-      };
-      propagate();
-      timer = setInterval(propagate, 3000);
-    });
-    return () => { cancelled = true; if (timer) clearInterval(timer); viewer.dataSources.remove(ds, true); };
-  }, [ready, app.layers.space, app.satellites.rows]);
+        break;
+      }
+      case "event": {
+        untrack();
+        const e = [...feeds.events, ...feeds.conflict].find((r) => r.id === sel.id);
+        if (e) { cam.flyToEvent(e.location.lon, e.location.lat); focus?.showAt(Cartesian3.fromDegrees(e.location.lon, e.location.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
+      case "news": {
+        untrack();
+        const n = feeds.news.find((r) => r.id === sel.id);
+        if (n?.location) { cam.flyToEvent(n.location.lon, n.location.lat); focus?.showAt(Cartesian3.fromDegrees(n.location.lon, n.location.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
+      case "weather": {
+        untrack();
+        const w = feeds.weather.find((r) => r.id === sel.id);
+        if (w) { cam.flyToPoint(w.lon, w.lat, 300_000); focus?.showAt(Cartesian3.fromDegrees(w.lon, w.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
+      default:
+        untrack();
+        orbitTrail.current?.hide();
+        focus?.hide();
+    }
+  }, [ready, app.selection]);
+
+  // --- motion trail + satellite coverage cone for the selection -------------
+  // Separate from the camera focus effect so toggling trails (or changing
+  // quality) never re-flies the camera. Reads live entities from the layers.
+  useEffect(() => {
+    const trail = trailRef.current;
+    const cone = coneRef.current;
+    if (!ready || !trail) return;
+    const sel = app.selection;
+    cone?.hide();
+    if (!sel || !app.trails) { trail.hide(); }
+
+    if (sel && app.trails) {
+      if (sel.kind === "aircraft") {
+        const ent = aircraftLayer.current?.getEntity(sel.id);
+        if (ent) trail.follow(ent, { color: Color.fromCssColorString(LAYER_BY_ID.aircraft.color), minSampleMeters: 1500, width: 4 });
+        else trail.hide();
+      } else if (sel.kind === "vessel") {
+        const ent = vesselLayer.current?.getEntity(sel.id);
+        if (ent) trail.follow(ent, { color: Color.fromCssColorString(LAYER_BY_ID.maritime.color), minSampleMeters: 400, width: 4 });
+        else trail.hide();
+      } else if (sel.kind === "satellite") {
+        const ent = satelliteLayer.current?.getEntity(sel.id);
+        const s = feedsRef.current.satellites.find((r) => r.id === sel.id);
+        if (ent) trail.follow(ent, { color: satColor(s?.periodMin ?? null), minSampleMeters: 25_000, width: 3 });
+        else trail.hide();
+      } else {
+        trail.hide();
+      }
+    }
+
+    // Coverage cone follows the satellite regardless of the trail toggle.
+    if (sel?.kind === "satellite") {
+      const ent = satelliteLayer.current?.getEntity(sel.id);
+      const s = feedsRef.current.satellites.find((r) => r.id === sel.id);
+      if (ent) cone?.follow(ent, satColor(s?.periodMin ?? null));
+    }
+  }, [ready, app.selection, app.trails, app.quality]);
 
   // --- fly-to ---------------------------------------------------------------
+  // Distance-adaptive cinematic flight (mission §16) via the camera controller.
   useEffect(() => {
-    const viewer = ref.current?.cesiumElement;
-    if (!ready || !viewer || !app.flyTo) return;
-    viewer.camera.flyTo({
-      destination: Cartesian3.fromDegrees(app.flyTo.lon, app.flyTo.lat, 2_500_000),
-      duration: 1.2,
-    });
+    if (!ready || !app.flyTo) return;
+    camRef.current?.flyToCountry(app.flyTo.lon, app.flyTo.lat);
   }, [ready, app.flyTo]);
 
   return (
@@ -309,32 +642,75 @@ export default function Globe() {
   );
 }
 
-// Imperative one-time scene configuration. Module-scope so React Compiler does
-// not treat the viewer as a render value being mutated.
-function configureScene(viewer: CesiumViewer) {
-  if (process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN) Ion.defaultAccessToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-  const scene = viewer.scene;
-  scene.globe.enableLighting = true;
-  scene.globe.showGroundAtmosphere = true;
-  if (scene.skyAtmosphere) scene.skyAtmosphere.show = true;
-  scene.globe.baseColor = Color.fromCssColorString("#0a1016");
-  scene.backgroundColor = Color.fromCssColorString("#05070a");
+// Maps Cesium entities we create to their domain selection, for click picking.
+const selectionMap = new WeakMap<CesiumEntity, NonNullable<Selection>>();
+
+/** Latest feed rows the hover resolver reads to label a picked entity. */
+interface HoverFeeds {
+  aircraft: AircraftState[];
+  vessels: VesselRow[];
+  events: WorldEvent[];
+  conflict: WorldEvent[];
+  news: NewsItem[];
+  weather: WeatherRow[];
+  satellites: SatelliteRow[];
 }
 
-// Maps Cesium entities we create to their domain selection, for click picking.
-const selectionMap = new WeakMap<CesiumEntity, NonNullable<import("@/stores/app-store").Selection>>();
+/** Resolve a picked scene object into a hover tooltip payload (or null). */
+function buildHoverInfo(picked: { id?: unknown }, x: number, y: number, feeds: HoverFeeds): HoverInfo | null {
+  const pid = picked.id;
+  if (Array.isArray(pid)) return { x, y, kind: "CLUSTER", title: `${pid.length} objects`, subtitle: "click to zoom in", color: "#93a0b1" };
+  const ent = pid instanceof CesiumEntity ? pid : undefined;
+  if (!ent) return null;
+  const sel = selectionMap.get(ent);
+  if (sel) return hoverForSelection(sel, feeds, x, y);
+  const iso3 = ent.properties?.ISO_A3?.getValue?.();
+  const name = ent.properties?.ADMIN?.getValue?.();
+  if (iso3) return { x, y, kind: "COUNTRY", title: (name as string) ?? String(iso3), subtitle: String(iso3), color: "#8aa0b6" };
+  return null;
+}
 
-/** Zoom the camera toward the ellipsoid point under the cursor (de-cluster). */
-function zoomTowardCursor(viewer: CesiumViewer, position: Cartesian2) {
-  const camera = viewer.camera;
-  const carto = camera.pickEllipsoid(position);
-  if (!carto) return;
-  const c = Cartographic.fromCartesian(carto);
-  const height = camera.positionCartographic.height;
-  viewer.camera.flyTo({
-    destination: Cartesian3.fromRadians(c.longitude, c.latitude, Math.max(height * 0.4, 250_000)),
-    duration: 0.8,
-  });
+function join(parts: (string | undefined | null)[]): string | undefined {
+  const s = parts.filter(Boolean).join(" · ");
+  return s || undefined;
+}
+
+function hoverForSelection(sel: NonNullable<Selection>, feeds: HoverFeeds, x: number, y: number): HoverInfo | null {
+  switch (sel.kind) {
+    case "aircraft": {
+      const a = feeds.aircraft.find((r) => r.id === sel.id);
+      const alt = a?.position.alt != null ? `FL${Math.round(a.position.alt / 0.3048 / 100)}` : undefined;
+      return { x, y, kind: "AIRCRAFT", title: a?.callsign?.trim() || sel.id, subtitle: join([a?.country, alt]), color: LAYER_BY_ID.aircraft.color };
+    }
+    case "vessel": {
+      const v = feeds.vessels.find((r) => r.id === sel.id);
+      return { x, y, kind: "VESSEL", title: v?.name?.trim() || v?.mmsi || sel.id, subtitle: join([v?.vesselType, v?.flag]), color: LAYER_BY_ID.maritime.color };
+    }
+    case "satellite": {
+      const s = feeds.satellites.find((r) => r.id === sel.id);
+      return { x, y, kind: "SATELLITE", title: s?.name || sel.id, subtitle: join([s?.operator, s?.objectType]), color: satColor(s?.periodMin ?? null).toCssColorString() };
+    }
+    case "event": {
+      const e = [...feeds.events, ...feeds.conflict].find((r) => r.id === sel.id);
+      return e ? { x, y, kind: e.kind.toUpperCase(), title: e.title, subtitle: e.severity, color: severityColor(e.severity).toCssColorString() } : null;
+    }
+    case "news": {
+      const n = feeds.news.find((r) => r.id === sel.id);
+      return n ? { x, y, kind: "NEWS", title: n.title, subtitle: n.source, color: LAYER_BY_ID.news.color } : null;
+    }
+    case "weather": {
+      const w = feeds.weather.find((r) => r.id === sel.id);
+      return w ? { x, y, kind: "WEATHER", title: w.place || "Observation", subtitle: w.value != null ? `${Math.round(w.value)}°${w.unit ?? "C"}` : undefined, color: LAYER_BY_ID.weather.color } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Ellipsoid pick → Cartographic, for de-cluster zoom. Null over empty space. */
+function ellipsoidPick(viewer: CesiumViewer, position: Cartesian2): Cartographic | null {
+  const cart = viewer.camera.pickEllipsoid(position);
+  return cart ? Cartographic.fromCartesian(cart) : null;
 }
 
 /** Give a datasource's clusters a filled disc + white count label. */
@@ -347,10 +723,10 @@ function styleClusters(ds: CustomDataSource, cssColor: string) {
     cluster.label.font = "600 12px Inter, sans-serif";
     cluster.label.fillColor = Color.WHITE;
     cluster.label.verticalOrigin = VerticalOrigin.CENTER;
-    cluster.label.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+    cluster.label.disableDepthTestDistance = DEPTH_TEST_DISABLE_M;
     cluster.billboard.show = true;
     cluster.billboard.image = disc;
-    cluster.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+    cluster.billboard.disableDepthTestDistance = DEPTH_TEST_DISABLE_M;
     cluster.billboard.scale = clustered.length > 100 ? 1.5 : clustered.length > 25 ? 1.25 : 1.0;
   });
 }
@@ -371,21 +747,6 @@ function discCanvas(cssColor: string): string {
   return c.toDataURL();
 }
 
-function addAircraft(ds: CustomDataSource, a: AircraftState, sprite: HTMLCanvasElement) {
-  const ent = ds.entities.add({
-    position: Cartesian3.fromDegrees(a.position.lon, a.position.lat, a.position.alt ?? 9000),
-    billboard: {
-      image: sprite,
-      rotation: a.headingDeg != null ? -CMath.toRadians(a.headingDeg) : 0,
-      scale: 0.9,
-      verticalOrigin: VerticalOrigin.CENTER,
-      scaleByDistance: new NearFarScalar(1.0e6, 1.2, 1.5e7, 0.55),
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-    },
-  });
-  selectionMap.set(ent, { kind: "aircraft", id: a.id });
-}
-
 function addEvent(ds: CustomDataSource, e: WorldEvent) {
   const ent = ds.entities.add({
     position: Cartesian3.fromDegrees(e.location.lon, e.location.lat, Math.max(e.location.alt ?? 0, 0)),
@@ -395,7 +756,7 @@ function addEvent(ds: CustomDataSource, e: WorldEvent) {
       outlineColor: Color.WHITE.withAlpha(0.45),
       outlineWidth: 1,
       heightReference: HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
     },
   });
   selectionMap.set(ent, { kind: "event", id: e.id });
@@ -410,25 +771,10 @@ function addNews(ds: CustomDataSource, n: NewsItem) {
       outlineColor: Color.BLACK.withAlpha(0.3),
       outlineWidth: 1,
       heightReference: HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
     },
   });
   selectionMap.set(ent, { kind: "news", id: n.id });
-}
-
-function addVessel(ds: CustomDataSource, v: VesselRow) {
-  const ent = ds.entities.add({
-    position: Cartesian3.fromDegrees(v.lon, v.lat, 0),
-    point: {
-      pixelSize: 7,
-      color: Color.fromCssColorString(LAYER_BY_ID.maritime.color).withAlpha(0.95),
-      outlineColor: Color.BLACK.withAlpha(0.35),
-      outlineWidth: 1,
-      heightReference: HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-    },
-  });
-  selectionMap.set(ent, { kind: "vessel", id: v.id });
 }
 
 // Blue (cold) → red (hot) ramp for temperature in °C.
@@ -447,7 +793,7 @@ function addWeather(ds: CustomDataSource, w: WeatherRow) {
       outlineColor: Color.WHITE.withAlpha(0.5),
       outlineWidth: 1,
       heightReference: HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
     },
     label: temp != null ? {
       text: `${Math.round(temp)}°`,
@@ -457,7 +803,7 @@ function addWeather(ds: CustomDataSource, w: WeatherRow) {
       backgroundColor: Color.fromCssColorString("#0c1016").withAlpha(0.7),
       pixelOffset: new Cartesian2(0, -16),
       scaleByDistance: new NearFarScalar(2.0e6, 1.0, 1.2e7, 0.0),
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
     } : undefined,
   });
   selectionMap.set(ent, { kind: "weather", id: w.id });
