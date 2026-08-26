@@ -32,6 +32,7 @@ import { setGlobeRuntime } from "@/lib/globe/runtime";
 import { LodController } from "@/lib/globe/lod";
 import { QUALITY_PRESETS } from "@/lib/globe/quality";
 import { MovingLayer } from "@/lib/globe/render/motion";
+import { StaticLayer } from "@/lib/globe/render/static";
 import { createAircraftLayer, createVesselLayer, createSatelliteLayer, satColor, DEPTH_TEST_DISABLE_M } from "@/lib/globe/render/layers";
 import { OrbitTrail } from "@/lib/globe/render/orbits";
 import { FocusOverlay } from "@/lib/globe/render/focus";
@@ -359,50 +360,68 @@ export default function Globe() {
     return () => { layer.dispose(); aircraftLayer.current = null; };
   }, [ready, app.layers.aircraft, aircraftArrow]);
 
-  // --- events layer (earthquakes + natural events) --------------------------
+  // --- events layer (earthquakes + natural events) — static diff/patch -------
+  // A poll no longer tears down the datasource: a persistent StaticLayer diffs
+  // rows by id, so markers keep identity, selection and hover across refreshes
+  // (audit W1 for static layers). Sub-toggles just change the filtered set the
+  // layer diffs against — no rebuild.
+  const eventsLayer = useRef<StaticLayer<WorldEvent> | null>(null);
+  const eventsRows = useRef<WorldEvent[]>([]);
+  const eventsOn = app.layers.earthquakes || app.layers.naturalEvents;
+  useEffect(() => {
+    const filtered = app.events.rows.filter((e) =>
+      e.tags?.includes("earthquake") ? app.layers.earthquakes : app.layers.naturalEvents,
+    );
+    eventsRows.current = filtered;
+    eventsLayer.current?.update(filtered);
+  }, [app.events.rows, app.layers.earthquakes, app.layers.naturalEvents]);
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
-    if (!ready || !viewer) return;
-    const ds = new CustomDataSource("events");
-    const show = app.layers.earthquakes || app.layers.naturalEvents;
-    if (show) {
-      for (const e of app.events.rows) {
-        const isQuake = e.tags?.includes("earthquake");
-        if (isQuake && !app.layers.earthquakes) continue;
-        if (!isQuake && !app.layers.naturalEvents) continue;
-        addEvent(ds, e);
-      }
-      viewer.dataSources.add(ds);
-      lodRef.current?.register("events", ds);
-    }
-    return () => { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); };
-  }, [ready, app.layers.earthquakes, app.layers.naturalEvents, app.events.rows]);
+    if (!ready || !viewer || !eventsOn) return;
+    const layer = createEventLayer(viewer, "events");
+    layer.mount();
+    layer.update(eventsRows.current);
+    eventsLayer.current = layer;
+    lodRef.current?.register("events", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); eventsLayer.current = null; };
+  }, [ready, eventsOn]);
 
-  // --- conflict layer (ACLED events from the vault) -------------------------
+  // --- conflict layer (ACLED events from the vault) — static diff/patch -------
+  const conflictLayer = useRef<StaticLayer<WorldEvent> | null>(null);
+  const conflictRows = useRef<WorldEvent[]>([]);
+  useEffect(() => {
+    conflictRows.current = app.conflict.rows;
+    conflictLayer.current?.update(app.conflict.rows);
+  }, [app.conflict.rows]);
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
-    if (!ready || !viewer) return;
-    const ds = new CustomDataSource("conflict");
-    if (app.layers.conflict) {
-      for (const e of app.conflict.rows) addEvent(ds, e);
-      viewer.dataSources.add(ds);
-      lodRef.current?.register("conflict", ds);
-    }
-    return () => { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); };
-  }, [ready, app.layers.conflict, app.conflict.rows]);
+    if (!ready || !viewer || !app.layers.conflict) return;
+    const layer = createEventLayer(viewer, "conflict");
+    layer.mount();
+    layer.update(conflictRows.current);
+    conflictLayer.current = layer;
+    lodRef.current?.register("conflict", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); conflictLayer.current = null; };
+  }, [ready, app.layers.conflict]);
 
-  // --- news layer -----------------------------------------------------------
+  // --- news layer — static diff/patch ---------------------------------------
+  const newsLayer = useRef<StaticLayer<NewsItem> | null>(null);
+  const newsRows = useRef<NewsItem[]>([]);
+  useEffect(() => {
+    const located = app.news.rows.filter((n) => n.location);
+    newsRows.current = located;
+    newsLayer.current?.update(located);
+  }, [app.news.rows]);
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
-    if (!ready || !viewer) return;
-    const ds = new CustomDataSource("news");
-    if (app.layers.news) {
-      for (const n of app.news.rows) if (n.location) addNews(ds, n);
-      viewer.dataSources.add(ds);
-      lodRef.current?.register("news", ds);
-    }
-    return () => { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); };
-  }, [ready, app.layers.news, app.news.rows]);
+    if (!ready || !viewer || !app.layers.news) return;
+    const layer = createNewsLayer(viewer);
+    layer.mount();
+    layer.update(newsRows.current);
+    newsLayer.current = layer;
+    lodRef.current?.register("news", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); newsLayer.current = null; };
+  }, [ready, app.layers.news]);
 
   // --- maritime layer (vessels) — diff/patch render manager -----------------
   const vesselLayer = useRef<MovingLayer<VesselRow> | null>(null);
@@ -424,18 +443,23 @@ export default function Globe() {
     return () => { layer.dispose(); vesselLayer.current = null; };
   }, [ready, app.layers.maritime]);
 
-  // --- weather layer --------------------------------------------------------
+  // --- weather layer — static diff/patch ------------------------------------
+  const weatherLayer = useRef<StaticLayer<WeatherRow> | null>(null);
+  const weatherRows = useRef<WeatherRow[]>([]);
+  useEffect(() => {
+    weatherRows.current = app.weather.rows;
+    weatherLayer.current?.update(app.weather.rows);
+  }, [app.weather.rows]);
   useEffect(() => {
     const viewer = ref.current?.cesiumElement;
-    if (!ready || !viewer) return;
-    const ds = new CustomDataSource("weather");
-    if (app.layers.weather) {
-      for (const w of app.weather.rows) addWeather(ds, w);
-      viewer.dataSources.add(ds);
-      lodRef.current?.register("weather", ds);
-    }
-    return () => { lodRef.current?.unregister(ds); viewer.dataSources.remove(ds, true); };
-  }, [ready, app.layers.weather, app.weather.rows]);
+    if (!ready || !viewer || !app.layers.weather) return;
+    const layer = createWeatherLayer(viewer);
+    layer.mount();
+    layer.update(weatherRows.current);
+    weatherLayer.current = layer;
+    lodRef.current?.register("weather", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); weatherLayer.current = null; };
+  }, [ready, app.layers.weather]);
 
   // --- satellites layer (SGP4 via render manager, continuous smooth motion) --
   // satellite.js is code-split; load it once the space layer is first enabled.
@@ -747,19 +771,35 @@ function discCanvas(cssColor: string): string {
   return c.toDataURL();
 }
 
-function addEvent(ds: CustomDataSource, e: WorldEvent) {
-  const ent = ds.entities.add({
-    position: Cartesian3.fromDegrees(e.location.lon, e.location.lat, Math.max(e.location.alt ?? 0, 0)),
+const eventSize = (sev: Severity): number => (sev === "critical" ? 14 : sev === "warning" ? 11 : 9);
+
+function eventGraphics(e: WorldEvent): CesiumEntity.ConstructorOptions {
+  return {
     point: {
-      pixelSize: e.severity === "critical" ? 14 : e.severity === "warning" ? 11 : 9,
+      pixelSize: eventSize(e.severity),
       color: severityColor(e.severity),
       outlineColor: Color.WHITE.withAlpha(0.45),
       outlineWidth: 1,
       heightReference: HeightReference.CLAMP_TO_GROUND,
       disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
     },
+  };
+}
+
+/** Shared factory for the event-shaped static layers (quakes/natural + conflict). */
+function createEventLayer(viewer: CesiumViewer, name: string): StaticLayer<WorldEvent> {
+  return new StaticLayer<WorldEvent>(viewer, selectionMap, {
+    name,
+    position: (e) => Cartesian3.fromDegrees(e.location.lon, e.location.lat, Math.max(e.location.alt ?? 0, 0)),
+    build: (e) => eventGraphics(e),
+    selection: (e) => ({ kind: "event", id: e.id }),
+    version: (e) => e.severity,
+    onUpdate: (ent, e) => {
+      if (!ent.point) return;
+      ent.point.pixelSize = new ConstantProperty(eventSize(e.severity));
+      ent.point.color = new ConstantProperty(severityColor(e.severity));
+    },
   });
-  selectionMap.set(ent, { kind: "event", id: e.id });
 }
 
 /** Deterministic ±~0.7° spread from a stable id, so many same-country articles
@@ -775,20 +815,25 @@ function scatter(id: string, lat: number): { lon: number; lat: number } {
   return { lon: dLon, lat: dLat };
 }
 
-function addNews(ds: CustomDataSource, n: NewsItem) {
-  const off = scatter(n.id, n.location!.lat);
-  const ent = ds.entities.add({
-    position: Cartesian3.fromDegrees(n.location!.lon + off.lon, n.location!.lat + off.lat, 0),
-    point: {
-      pixelSize: 8,
-      color: Color.fromCssColorString(LAYER_BY_ID.news.color).withAlpha(0.9),
-      outlineColor: Color.BLACK.withAlpha(0.3),
-      outlineWidth: 1,
-      heightReference: HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+function createNewsLayer(viewer: CesiumViewer): StaticLayer<NewsItem> {
+  return new StaticLayer<NewsItem>(viewer, selectionMap, {
+    name: "news",
+    position: (n) => {
+      const off = scatter(n.id, n.location!.lat);
+      return Cartesian3.fromDegrees(n.location!.lon + off.lon, n.location!.lat + off.lat, 0);
     },
+    build: () => ({
+      point: {
+        pixelSize: 8,
+        color: Color.fromCssColorString(LAYER_BY_ID.news.color).withAlpha(0.9),
+        outlineColor: Color.BLACK.withAlpha(0.3),
+        outlineWidth: 1,
+        heightReference: HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+      },
+    }),
+    selection: (n) => ({ kind: "news", id: n.id }),
   });
-  selectionMap.set(ent, { kind: "news", id: n.id });
 }
 
 // Blue (cold) → red (hot) ramp for temperature in °C.
@@ -797,10 +842,9 @@ function tempColor(c: number): Color {
   return Color.fromHsl((1 - t) * 0.66, 0.85, 0.55);
 }
 
-function addWeather(ds: CustomDataSource, w: WeatherRow) {
+function weatherGraphics(w: WeatherRow): CesiumEntity.ConstructorOptions {
   const temp = w.value;
-  const ent = ds.entities.add({
-    position: Cartesian3.fromDegrees(w.lon, w.lat, 0),
+  return {
     point: {
       pixelSize: 10,
       color: (temp != null ? tempColor(temp) : Color.GRAY).withAlpha(0.95),
@@ -819,6 +863,20 @@ function addWeather(ds: CustomDataSource, w: WeatherRow) {
       scaleByDistance: new NearFarScalar(2.0e6, 1.0, 1.2e7, 0.0),
       disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
     } : undefined,
+  };
+}
+
+function createWeatherLayer(viewer: CesiumViewer): StaticLayer<WeatherRow> {
+  return new StaticLayer<WeatherRow>(viewer, selectionMap, {
+    name: "weather",
+    position: (w) => Cartesian3.fromDegrees(w.lon, w.lat, 0),
+    build: (w) => weatherGraphics(w),
+    selection: (w) => ({ kind: "weather", id: w.id }),
+    version: (w) => String(w.value ?? ""),
+    onUpdate: (ent, w) => {
+      const temp = w.value;
+      if (ent.point) ent.point.color = new ConstantProperty((temp != null ? tempColor(temp) : Color.GRAY).withAlpha(0.95));
+      if (ent.label && temp != null) ent.label.text = new ConstantProperty(`${Math.round(temp)}°`);
+    },
   });
-  selectionMap.set(ent, { kind: "weather", id: w.id });
 }

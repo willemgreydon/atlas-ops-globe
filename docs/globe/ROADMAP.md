@@ -52,8 +52,13 @@ Tracks the mission's phase plan (§155). ✅ done · 🚧 in progress · ⬜ pla
   quality-preset label budget (nearest-N labels kept, rest hidden). Pure core
   unit-tested (`tests/globe/lod.test.ts`); e2e-verified via the live camera
   altitude → band. Band surfaced in the dev perf panel. Closes audit **W3**.
-- ⬜ Static-layer diff/patch (events/news/weather), GeoJsonPrimitive + MVT
-  (§13 §74 §75), camera-driven viewport fetching (§78 §79).
+- ✅ Static-layer diff/patch (§13 §74) — events/quakes, conflict, news and
+  weather now render through a persistent `StaticLayer` (`lib/globe/render/static.ts`)
+  that diffs rows by id (add/remove/version-gated in-place update) instead of
+  tearing down and rebuilding the datasource each poll. Identity, selection,
+  hover and LOD registration survive refreshes. Closes audit W1 for the static
+  layers; unit-tested diff core.
+- ⬜ GeoJsonPrimitive + MVT (§75), camera-driven viewport fetching (§78 §79).
 
 ## Phase D — Live mobility 🚧
 
