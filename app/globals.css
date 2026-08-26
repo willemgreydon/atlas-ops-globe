@@ -21,6 +21,75 @@
   --radius: 11px;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* ---- Motion system ----
+     Fast, purposeful easing for a tactical ops tool. Every animation that uses
+     these is disabled wholesale by the prefers-reduced-motion guard below. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);      /* premium expo settle */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1); /* gentle overshoot */
+  --dur-1: 120ms;   /* micro: hover, press, color */
+  --dur-2: 180ms;   /* standard: panel/element entrance */
+  --dur-3: 260ms;   /* deliberate: modal, large surfaces */
+  --stagger: 40ms;  /* per-item list cascade */
+  --elev-1: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --elev-2: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --elev-3: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* =========================================================================
+   Motion foundation — keyframes + reduced-motion kill-switch
+   Additive substrate; nothing here animates until a rule opts in.
+   ========================================================================= */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+/* Diagonal sheen used to signal "cached / delayed / working" liveness. */
+@keyframes shimmer {
+  from { background-position: -160% 0; }
+  to { background-position: 160% 0; }
+}
+/* Indeterminate track sweep for skeletons / progress hints. */
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Utility spinner available to any loading surface (replaces bare "…"). */
+.spinner {
+  display: inline-block; width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite; vertical-align: -2px;
+}
+
+/* One switch turns off every entrance/looping animation for users who ask.
+   Transitions are collapsed (not removed) so focus/hover still register. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -40,6 +109,11 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
   height: 100vh;
   display: grid;
   grid-template-rows: 46px 1fr 30px;
+  /* Cap the single column at the container width so a wide top bar can never
+     stretch the whole shell past the viewport (which pushed the absolute HUD
+     panels off-screen on mobile). */
+  grid-template-columns: minmax(0, 1fr);
+  width: 100vw; max-width: 100%; overflow: hidden;
   background: radial-gradient(circle at 55% 38%, #0f1a24 0, #080c11 58%, #05070a 100%);
 }
 
@@ -48,10 +122,15 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
   display: flex; align-items: center; gap: 20px; padding: 0 16px;
   border-bottom: 1px solid var(--line);
   background: rgba(5, 8, 12, 0.9); backdrop-filter: blur(14px); z-index: 30;
+  min-width: 0; /* allow flex children to shrink instead of overflowing the shell */
 }
-.brand { font-weight: 800; letter-spacing: 0.18em; font-size: 12px; }
+.brand { font-weight: 800; letter-spacing: 0.18em; font-size: 12px; flex-shrink: 0; }
 .brand span { color: var(--accent); margin: 0 2px; }
-.nav { display: flex; gap: 4px; }
+/* Modes scroll horizontally when they don't all fit (mobile) rather than
+   forcing the header wider than the screen. */
+.nav { display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
+.nav button { flex-shrink: 0; }
 .nav button {
   position: relative; border: 1px solid transparent; padding: 6px 11px; border-radius: 8px;
   font-size: 12px; color: var(--muted); transition: color 0.15s, border-color 0.15s, background 0.15s;
@@ -80,21 +159,54 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
 /* =========================================================================
    Workspace + globe
    ========================================================================= */
-.workspace { position: relative; min-height: 0; }
+.workspace { position: relative; min-height: 0; min-width: 0; overflow: hidden; }
 .globe-wrap { position: absolute; inset: 0; }
 .hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
 .hud > * { pointer-events: auto; }
-.loading { position: absolute; inset: 0; display: grid; place-items: center; background: #06090d; color: #cfd7e2; letter-spacing: 0.16em; font-size: 11px; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; grid-auto-flow: row; gap: 16px; background: #06090d; color: #cfd7e2; letter-spacing: 0.16em; font-size: 11px; }
+.loading::before { content: ""; width: 22px; height: 22px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 .cesium-viewer-bottom, .cesium-widget-credits { display: none !important; }
 
 /* =========================================================================
    Panels (shared)
    ========================================================================= */
-.panel { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); backdrop-filter: blur(18px); overflow: hidden; }
+.panel {
+  border: 1px solid var(--line-strong); background: var(--panel); border-radius: var(--radius);
+  backdrop-filter: blur(18px); overflow: hidden;
+  /* Elevation + a hairline top highlight lift panels off the gradient backdrop
+     instead of blending flat into it. */
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
 .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 11px 12px 8px; }
 .panel h3, .layers h3 { margin: 0; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #c8d0db; }
 .count-pill, .mode-chip { font: 700 10px/1 var(--mono); padding: 3px 7px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted); }
 .mode-chip { color: var(--accent); border-color: rgba(101, 246, 199, 0.4); }
+
+/* =========================================================================
+   Shell entrance choreography + focus rings
+   Panels cascade in from their resting edge on mount; the guard above makes
+   this instant for reduced-motion users.
+   ========================================================================= */
+.topbar { animation: fadeInDown var(--dur-2) var(--ease-out) both; }
+.ticker { animation: fadeIn var(--dur-3) var(--ease-out) both; }
+
+.right-stack > * { animation: slideInRight var(--dur-2) var(--ease-out) both; }
+.hud-left > * { animation: slideInLeft var(--dur-2) var(--ease-out) both; }
+
+/* Per-item cascade — the column reads as one deliberate sweep, not a pop. */
+.right-stack > *:nth-child(1), .hud-left > *:nth-child(1) { animation-delay: 60ms; }
+.right-stack > *:nth-child(2), .hud-left > *:nth-child(2) { animation-delay: calc(60ms + var(--stagger)); }
+.right-stack > *:nth-child(3), .hud-left > *:nth-child(3) { animation-delay: calc(60ms + 2 * var(--stagger)); }
+.right-stack > *:nth-child(4), .hud-left > *:nth-child(4) { animation-delay: calc(60ms + 3 * var(--stagger)); }
+.right-stack > *:nth-child(5), .hud-left > *:nth-child(5) { animation-delay: calc(60ms + 4 * var(--stagger)); }
+.right-stack > *:nth-child(n + 6) { animation-delay: calc(60ms + 5 * var(--stagger)); }
+
+/* Keyboard focus is always visible; pointer clicks stay clean (:focus-visible). */
+button:focus-visible, a:focus-visible, input:focus-visible,
+[role="button"]:focus-visible, [tabindex]:focus-visible, label:focus-within {
+  outline: 2px solid rgba(101, 246, 199, 0.7);
+  outline-offset: 2px; border-radius: 7px;
+}
 
 /* ---- Layer manager ---- */
 .layers { position: absolute; left: 14px; top: 14px; width: 234px; padding: 11px 12px; }
@@ -110,7 +222,25 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
 .feed-live { background: var(--accent); } .feed-cached { background: var(--info); } .feed-mock { background: #d59bff; } .feed-offline { background: var(--muted-2); } .feed-delayed { background: var(--warning); }
 
 /* ---- Right stack ---- */
-.right-stack { position: absolute; right: 14px; top: 14px; bottom: 14px; width: 372px; display: flex; flex-direction: column; gap: 10px; }
+/* The column itself scrolls; each panel keeps its natural height (never squeezed
+   to a sliver or clipped by the panel's own `overflow: hidden`). Long inner lists
+   (alerts, news, inspector) get their own capped scroll below. */
+.right-stack { position: absolute; right: 14px; top: 14px; bottom: 14px; width: 372px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overflow-x: hidden; padding-right: 4px; overscroll-behavior: contain; }
+.right-stack > * { flex: 0 0 auto; }
+
+/* Consistent thin, unobtrusive scrollbars for every overlay scroll surface. */
+.right-stack, .hud-left, .feed-scroll, .inspector-body, .alert-list, .palette-results {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.right-stack::-webkit-scrollbar, .hud-left::-webkit-scrollbar, .feed-scroll::-webkit-scrollbar,
+.inspector-body::-webkit-scrollbar, .alert-list::-webkit-scrollbar, .palette-results::-webkit-scrollbar { width: 8px; height: 8px; }
+.right-stack::-webkit-scrollbar-thumb, .hud-left::-webkit-scrollbar-thumb, .feed-scroll::-webkit-scrollbar-thumb,
+.inspector-body::-webkit-scrollbar-thumb, .alert-list::-webkit-scrollbar-thumb, .palette-results::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14); border-radius: 8px;
+}
+.right-stack::-webkit-scrollbar-thumb:hover, .hud-left::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.24); }
+.right-stack::-webkit-scrollbar-track, .hud-left::-webkit-scrollbar-track { background: transparent; }
 
 /* ---- Alert center ---- */
 .alert-center .alert-list { padding: 4px 10px 10px; display: flex; flex-direction: column; gap: 7px; max-height: 236px; overflow: auto; }
@@ -126,6 +256,29 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
 .sev-tag.sev-warning { color: var(--warning); background: rgba(255, 174, 69, 0.12); }
 .sev-tag.sev-watch, .sev-tag.sev-info { color: var(--info); background: rgba(84, 199, 255, 0.12); }
 
+/* ---- Filter/sort chips (shared) ---- */
+.chip-row { display: flex; gap: 5px; padding: 2px 12px 8px; flex-wrap: wrap; }
+.chip {
+  font: 700 9.5px/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 4px 8px; border-radius: 20px; border: 1px solid var(--line);
+  color: var(--muted); background: rgba(255, 255, 255, 0.02);
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+.chip:hover { color: var(--text); border-color: var(--line-strong); }
+.chip:active { transform: scale(0.96); }
+.chip.active { color: var(--accent); border-color: rgba(101, 246, 199, 0.42); background: rgba(101, 246, 199, 0.08); }
+.chip .chip-n { color: var(--muted-2); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+/* ---- System status (freshness HUD) ---- */
+.sysstat .sys-list { padding: 2px 12px 10px; }
+.sys-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 11.5px; }
+.sys-row:first-child { border-top: none; }
+.sys-row .feed-dot { flex-shrink: 0; }
+.sys-name { color: #d6dce5; flex: 1; }
+.sys-count { font: 700 10px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+.sys-ago { font: 600 10px/1 var(--mono); color: var(--muted-2); min-width: 40px; text-align: right; }
+.sys-row.off { opacity: 0.42; }
+
 /* ---- Telemetry ---- */
 .telemetry .tele-list { padding: 2px 12px 4px; }
 .tele-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
@@ -135,8 +288,8 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
 .tele-blurb { padding: 0 12px 11px; margin: 4px 0 0; font-size: 11px; color: var(--muted-2); line-height: 1.4; }
 
 /* ---- News feed ---- */
-.news-feed { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.feed-scroll { overflow: auto; min-height: 0; flex: 1; }
+.news-feed { display: flex; flex-direction: column; min-height: 0; }
+.feed-scroll { overflow: auto; min-height: 0; max-height: 340px; }
 .feed-empty { padding: 0 12px 12px; }
 .feed-item { display: block; width: 100%; text-align: left; padding: 9px 12px; border-top: 1px solid var(--line); }
 .feed-item:hover { background: rgba(255, 255, 255, 0.035); }
@@ -144,9 +297,24 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
 .feed-item .title { font-size: 12px; line-height: 1.45; margin-top: 3px; color: #dbe1ea; }
 
 /* ---- Inspector ---- */
-.inspector { display: flex; flex-direction: column; max-height: 62%; }
+.inspector { display: flex; flex-direction: column; }
 .inspector-head { display: flex; align-items: center; justify-content: space-between; padding: 11px 12px 8px; }
-.inspector-body { padding: 4px 13px 14px; overflow: auto; }
+.inspector-body { padding: 4px 13px 14px; overflow: auto; max-height: 460px; }
+/* Re-keyed on every selection change → content swaps fade up instead of snapping. */
+.inspector-body { animation: fadeInUp var(--dur-2) var(--ease-out) both; }
+
+/* ---- Skeletons + empty states ---- */
+.skeleton { position: relative; overflow: hidden; background: rgba(255, 255, 255, 0.045); border-radius: 6px; }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  animation: sweep 1.15s var(--ease-in-out) infinite;
+}
+.skel-line { height: 11px; margin: 8px 0; }
+.skel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+.skel-box { height: 46px; border-radius: 9px; }
+.empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 6px 0; }
+.empty-state .muted-note { margin: 0; }
 .icon-btn { color: var(--muted); padding: 3px; border-radius: 6px; display: inline-flex; }
 .icon-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
 .entity-title { font-size: 15px; font-weight: 700; line-height: 1.3; margin-top: 4px; }
@@ -196,6 +364,39 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .ent-count { font: 700 10px/1 var(--mono); color: var(--accent); padding: 2px 6px; border: 1px solid var(--line); border-radius: 20px; flex-shrink: 0; }
 
 /* =========================================================================
+   Micro-interactions + data liveness
+   ========================================================================= */
+/* Smooth every interactive surface (many had no transition at all). */
+.layer-row, .feed-item, .ent-row, .mini-row, .palette-item, .alert,
+.link-btn, .icon-btn, .search-trigger, .nav button, .seg, .quote {
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+/* List rows nudge toward the reader on hover; cards lift off the surface. */
+.feed-item:hover, .layer-row:hover:not(.planned), .ent-row:hover, button.mini-row:hover,
+.palette-item:hover { transform: translateX(2px); }
+.alert:hover { transform: translateY(-1px); box-shadow: var(--elev-1); }
+.metric, .vault-metric { transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out); }
+/* Tactile press feedback on buttons. */
+.link-btn:active, .icon-btn:active, .search-trigger:active,
+.nav button:active, .seg:active { transform: scale(0.97); }
+/* Slightly more legible hover fills (were near-invisible at 0.03α). */
+.layer-row:hover:not(.planned) { background: rgba(255, 255, 255, 0.055); }
+.feed-item:hover { background: rgba(255, 255, 255, 0.05); }
+
+/* Stable numeric columns so live-updating figures don't jitter width. */
+.count-pill, .ent-count, .quote, .tele-val, .metric b, .vault-metric b,
+.utc, .palette-count, .perf-row b { font-variant-numeric: tabular-nums; }
+
+/* Liveness: cached/delayed feeds breathe instead of sitting frozen. */
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.status-cached .status-dot { box-shadow: 0 0 6px var(--info); animation: breathe 3s var(--ease-in-out) infinite; }
+.status-delayed .status-dot { box-shadow: 0 0 6px var(--warning); animation: breathe 2.4s var(--ease-in-out) infinite; }
+.feed-cached { animation: breathe 3s var(--ease-in-out) infinite; }
+.feed-delayed { animation: breathe 2.4s var(--ease-in-out) infinite; }
+
+/* =========================================================================
    Ticker
    ========================================================================= */
 .ticker { display: flex; align-items: center; border-top: 1px solid var(--line); background: rgba(5, 8, 12, 0.94); backdrop-filter: blur(12px); overflow: hidden; z-index: 20; }
@@ -213,8 +414,13 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 /* =========================================================================
    Command palette
    ========================================================================= */
-.palette-overlay { position: fixed; inset: 0; background: rgba(3, 5, 8, 0.55); backdrop-filter: blur(3px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
-.palette { width: min(640px, 92vw); background: var(--panel-solid); border: 1px solid var(--line-strong); border-radius: 14px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); overflow: hidden; }
+.palette-overlay { position: fixed; inset: 0; background: rgba(3, 5, 8, 0.55); backdrop-filter: blur(3px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; animation: fadeIn var(--dur-2) var(--ease-out) both; }
+.palette { width: min(640px, 92vw); background: var(--panel-solid); border: 1px solid var(--line-strong); border-radius: 14px; box-shadow: var(--elev-3); overflow: hidden; animation: scaleIn var(--dur-3) var(--ease-spring) both; transform-origin: top center; }
+.palette-item { animation: fadeIn var(--dur-1) var(--ease-out) both; }
+.palette-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted-2); }
+.palette-hints { display: flex; gap: 12px; flex-wrap: wrap; }
+.palette-hints span { display: inline-flex; align-items: center; gap: 5px; }
+.palette-count { flex-shrink: 0; font: 700 10px/1 var(--mono); letter-spacing: 0.04em; }
 .palette-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); color: var(--muted); }
 .palette-input input { flex: 1; border: none; background: none; outline: none; color: var(--text); font-size: 15px; }
 .palette-results { max-height: 52vh; overflow: auto; padding: 6px; }
@@ -226,17 +432,130 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .palette-label { flex: 1; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .palette-sub { font-size: 11px; color: var(--muted-2); }
 
+/* Mobile-only chrome: bottom tab bar + dock scrim. Hidden on desktop, where the
+   HUD panels float at the edges and are always visible. */
+.mobile-nav { display: none; }
+.dock-scrim { display: none; }
+
 /* =========================================================================
    Responsive
    ========================================================================= */
-@media (max-width: 1000px) {
-  .right-stack { width: 320px; }
-  .layers { width: 208px; }
+@media (max-width: 1200px) {
+  .right-stack { width: 336px; }
 }
 @media (max-width: 760px) {
-  .app-shell { grid-template-rows: 46px 1fr 30px; }
   .nav button:nth-child(n + 5) { display: none; }
-  .layers { display: none; }
-  .right-stack { position: absolute; left: 8px; right: 8px; width: auto; top: auto; bottom: 8px; max-height: 46%; }
   .utc { display: none; }
+  /* Dev-only FPS panel would overlap the sheets on a phone. */
+  .perf-panel { display: none; }
+
+  /* --- Bottom tab bar: summons the HUD sheets; globe stays full behind it. --- */
+  .mobile-nav {
+    display: flex; position: absolute; left: 0; right: 0; bottom: 0; z-index: 60;
+    align-items: stretch; gap: 6px;
+    padding: 5px 8px calc(5px + env(safe-area-inset-bottom, 0px));
+    background: rgba(6, 9, 13, 0.93); backdrop-filter: blur(14px); border-top: 1px solid var(--line);
+  }
+  .mnav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 46px; border: 1px solid transparent; border-radius: 10px; background: none;
+    color: var(--muted); font: 600 10px/1 var(--sans); letter-spacing: 0.04em;
+  }
+  .mnav-btn.active { color: var(--accent); background: rgba(101, 246, 199, 0.09); border-color: rgba(101, 246, 199, 0.32); }
+  .mnav-ico { position: relative; display: inline-flex; }
+  .mnav-badge { position: absolute; top: -2px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--critical); box-shadow: 0 0 0 2px rgba(6, 9, 13, 0.93); }
+
+  /* --- Scrim behind an open sheet: tap to dismiss; globe shows through. --- */
+  .dock-scrim {
+    display: block; position: absolute; inset: 0 0 54px; z-index: 45; border: none;
+    background: rgba(3, 5, 8, 0.34); animation: fadeIn var(--dur-1) var(--ease-out) both;
+  }
+
+  /* --- HUD panels collapse to bottom sheets, closed by default. --- */
+  .hud-left, .right-stack {
+    position: absolute; left: 0; right: 0; top: auto; bottom: 54px; width: auto; z-index: 50;
+    max-height: 74vh; padding: 6px 12px 14px; gap: 8px;
+    background: rgba(8, 12, 17, 0.97); backdrop-filter: blur(20px);
+    border-top: 1px solid var(--line-strong); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.55);
+    overflow-y: auto; overscroll-behavior: contain;
+    /* Hidden below the fold until its dock is active. */
+    transform: translateY(calc(100% + 60px));
+    transition: transform var(--dur-3) var(--ease-spring);
+  }
+  /* Grab handle, pinned to the top of the scrolling sheet. */
+  .hud-left::before, .right-stack::before {
+    content: ""; position: sticky; top: 0; z-index: 1; display: block;
+    width: 38px; height: 4px; margin: 2px auto 8px; border-radius: 3px; background: rgba(255, 255, 255, 0.22);
+  }
+  .hud[data-dock="layers"] .hud-left { transform: none; }
+  .hud[data-dock="intel"] .right-stack { transform: none; }
+  /* The edge-slide entrance animations fight the sheet transform on mobile. */
+  .hud-left > *, .right-stack > * { animation: none; }
 }
+
+/* =========================================================================
+   Globe dev performance panel (mission §117) — only shown with ?perf=1 or dev
+   ========================================================================= */
+.perf-panel {
+  /* Bottom-centre, in the free band between the two edge sidebars (was top-left,
+     where it overlapped the layers panel). Narrow box → fits the band at any
+     width; sits just above the ticker. */
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 40;
+  min-width: 150px; padding: 8px 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  backdrop-filter: blur(6px);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  pointer-events: none; user-select: none;
+}
+.perf-row { display: flex; align-items: baseline; gap: 8px; line-height: 1.7; }
+.perf-row > span:first-child { width: 62px; color: var(--muted-2); text-transform: uppercase; font-size: 9px; letter-spacing: 0.04em; }
+.perf-row b { color: var(--text); font-weight: 600; }
+.perf-dim { color: var(--muted-2); font-size: 10px; }
+
+/* =========================================================================
+   Globe settings panel (Phase B render controls)
+   ========================================================================= */
+.hud-left { position: absolute; left: 14px; top: 14px; width: 280px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100% - 28px); overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; pointer-events: auto; }
+/* Panels keep their natural height — never shrink-and-clip inside the column
+   (`.panel` is overflow:hidden). The column scrolls instead. */
+.hud-left > * { flex: 0 0 auto; }
+.hud-left .layers { position: static; width: auto; top: auto; left: auto; }
+.globe-settings { padding: 0; }
+/* Collapsible panel header (chevron rotates when collapsed). */
+.collapse-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 11px 12px; background: none; border: none; text-align: left; cursor: pointer; }
+.collapse-head h3 { margin: 0; }
+.collapse-chevron { color: var(--muted-2); transition: transform var(--dur-2) var(--ease-out); flex-shrink: 0; }
+.globe-settings.collapsed .collapse-chevron { transform: rotate(-90deg); }
+.collapse-body { padding: 0 12px 12px; }
+.setting { margin-bottom: 10px; }
+.setting-label { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-2); margin-bottom: 5px; }
+.segmented { display: flex; flex-wrap: wrap; gap: 3px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
+.seg { flex: 1 1 auto; padding: 5px 6px; font-size: 11px; color: var(--muted); border-radius: 5px; border: 1px solid transparent; background: none; transition: background 0.12s, color 0.12s; white-space: nowrap; }
+.seg:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
+.seg.active { color: var(--text); background: rgba(101, 246, 199, 0.10); border-color: rgba(101, 246, 199, 0.42); }
+.setting-check { display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; color: var(--muted); margin: 6px 0 12px; cursor: pointer; }
+.setting-check input { margin-top: 2px; accent-color: var(--accent); }
+.setting-check-text { display: flex; flex-direction: column; gap: 1px; }
+.setting-hint { font-size: 10px; line-height: 1.5; color: var(--muted-2); margin: 4px 0 0; }
+.setting-hint code { font-family: var(--mono); font-size: 9.5px; color: var(--muted); background: rgba(255, 255, 255, 0.05); padding: 1px 4px; border-radius: 4px; }
+.setting-group { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
+.setting-group .setting-check { margin: 7px 0; }
+
+/* ---- Globe hover tooltip ---- */
+.globe-tooltip {
+  position: absolute; z-index: 20; pointer-events: none; will-change: transform;
+  display: flex; flex-direction: column; gap: 1px; max-width: 240px;
+  padding: 7px 10px; border-radius: 9px;
+  background: var(--panel); border: 1px solid var(--line-strong);
+  backdrop-filter: blur(10px); box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+  /* Trailing follow instead of teleporting under the cursor; fades on appear. */
+  transition: transform 80ms var(--ease-out);
+  animation: fadeIn var(--dur-1) var(--ease-out) both;
+}
+.globe-tooltip-kind { font: 700 9px/1.2 var(--mono); letter-spacing: 0.1em; color: var(--muted); }
+.globe-tooltip-title { font-size: 12.5px; font-weight: 650; color: var(--text); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.globe-tooltip-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 1200px) { .hud-left { width: 250px; } }
+/* Mobile: `.hud-left` becomes a bottom sheet in the Responsive section above. */

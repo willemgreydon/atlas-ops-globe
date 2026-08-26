@@ -58,13 +58,21 @@ export default function Inspector() {
           <X size={14} />
         </button>
       </div>
-      <div className="inspector-body">{body}</div>
+      <div className="inspector-body" key={"id" in sel ? `${sel.kind}:${sel.id}` : `country:${sel.iso3}`}>
+        {body}
+      </div>
     </section>
   );
 }
 
 function Missing({ kind }: { kind: string }) {
-  return <p className="muted-note">{kind} no longer in the current data window.</p>;
+  const app = useApp();
+  return (
+    <div className="empty-state">
+      <p className="muted-note">{kind} is no longer in the current data window — its feed has rolled forward since you selected it.</p>
+      <button className="link-btn" onClick={() => app.select(null)}>Dismiss</button>
+    </div>
+  );
 }
 
 function Field({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -293,7 +301,19 @@ function CountryView({ iso3, name }: { iso3: string; name?: string }) {
       <div className="entity-sub">
         Country · {iso3} <StatusBadge status={status} /> <span className="src-chip">VAULT</span>
       </div>
-      {loading && <p className="muted-note">Loading country intelligence…</p>}
+      {loading && (
+        <div className="skel-wrap" aria-label="Loading country intelligence" aria-busy="true">
+          <div className="skeleton skel-line" style={{ width: "60%" }} />
+          <div className="skel-grid">
+            <div className="skeleton skel-box" />
+            <div className="skeleton skel-box" />
+            <div className="skeleton skel-box" />
+            <div className="skeleton skel-box" />
+          </div>
+          <div className="skeleton skel-line" style={{ width: "80%" }} />
+          <div className="skeleton skel-line" style={{ width: "45%" }} />
+        </div>
+      )}
       {error && <p className="muted-note">Source degraded: {error}</p>}
       {profile && (
         <>

@@ -45,9 +45,10 @@ export default function CommandPalette() {
     }
   }, [app.searchOpen]);
 
-  const results = useMemo<Result[]>(() => {
+  const MAX_RESULTS = 40;
+  const { results, total } = useMemo<{ results: Result[]; total: number }>(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return [];
+    if (!term) return { results: [], total: 0 };
     const out: Result[] = [];
 
     for (const c of countryCentroids) {
@@ -89,7 +90,7 @@ export default function CommandPalette() {
         });
       }
     }
-    return out.slice(0, 40);
+    return { results: out.slice(0, MAX_RESULTS), total: out.length };
   }, [q, app]);
 
   if (!app.searchOpen) return null;
@@ -124,6 +125,7 @@ export default function CommandPalette() {
             <button
               key={`${r.kind}:${r.id}`}
               className={`palette-item ${i === cursor ? "active" : ""}`}
+              style={{ animationDelay: `${Math.min(i, 8) * 16}ms` }}
               onMouseEnter={() => setCursor(i)}
               onClick={() => pick(r)}
             >
@@ -132,6 +134,16 @@ export default function CommandPalette() {
               <span className="palette-sub">{r.sub}</span>
             </button>
           ))}
+        </div>
+        <div className="palette-foot">
+          <div className="palette-hints">
+            <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+            <span><kbd>⏎</kbd> open</span>
+            <span><kbd>esc</kbd> close</span>
+          </div>
+          <span className="palette-count">
+            {total > MAX_RESULTS ? `${MAX_RESULTS} of ${total}` : total > 0 ? `${total} match${total === 1 ? "" : "es"}` : ""}
+          </span>
         </div>
       </div>
     </div>

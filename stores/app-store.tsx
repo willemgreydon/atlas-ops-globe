@@ -3,6 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { AircraftState, DataStatus, NewsItem, WorldEvent } from "@/types/domain";
 import { LAYERS, type LayerId } from "@/lib/config/layers";
 import { MODE_BY_ID, type ModeId } from "@/lib/config/modes";
+import { type GlobeQuality, autoDetectQuality } from "@/lib/globe/quality";
+import type { AtmospherePreset, LightingMode } from "@/lib/globe/scene";
+import { type TerrainMode, ionTokenPresent } from "@/lib/globe/terrain-config";
 
 export type Selection =
   | { kind: "aircraft"; id: string }
@@ -13,6 +16,9 @@ export type Selection =
   | { kind: "satellite"; id: string }
   | { kind: "country"; iso3: string; name?: string }
   | null;
+
+/** Which HUD sheet is docked open on a phone (null = none, globe fully visible). */
+export type MobileDock = "layers" | "intel" | null;
 
 /** Satellite catalogue row (with SGP4 TLE) from /api/intelligence/space. */
 export interface SatelliteRow {
@@ -113,6 +119,13 @@ interface AppState {
   select: (s: Selection) => void;
   searchOpen: boolean;
   setSearchOpen: (open: boolean) => void;
+  /**
+   * Which HUD panel is docked open on a phone-sized viewport. On desktop the
+   * panels are always visible and this is inert; on mobile they collapse to
+   * on-demand bottom sheets so the globe is never occluded (null = all closed).
+   */
+  dock: MobileDock;
+  setDock: (d: MobileDock) => void;
   aircraft: Feed<AircraftState>;
   events: Feed<WorldEvent>;
   news: Feed<NewsItem>;
@@ -131,6 +144,30 @@ interface AppState {
   /** Fly-to request consumed by the globe; bumped on each navigation. */
   flyTo: { lat: number; lon: number; nonce: number } | null;
   requestFlyTo: (lat: number, lon: number) => void;
+  /** Render-quality ceiling; the performance governor may render below it. */
+  quality: GlobeQuality;
+  setQuality: (q: GlobeQuality) => void;
+  /** Let the performance governor auto-adjust quality (mission §4). */
+  autoQuality: boolean;
+  setAutoQuality: (v: boolean) => void;
+  /** Atmosphere character preset (mission §7). */
+  atmosphere: AtmospherePreset;
+  setAtmosphere: (a: AtmospherePreset) => void;
+  /** Globe lighting model (mission §6). */
+  lighting: LightingMode;
+  setLighting: (l: LightingMode) => void;
+  /** Celestial environment: starfield, sun, moon, bloom + lens flare (§8). */
+  environment: boolean;
+  setEnvironment: (v: boolean) => void;
+  /** Disaster/alert shockwave ripples (§34 §37). */
+  effects: boolean;
+  setEffects: (v: boolean) => void;
+  /** Motion trail behind the selected moving entity (§22 §25). */
+  trails: boolean;
+  setTrails: (v: boolean) => void;
+  /** Surface mode: ellipsoid, ion World Terrain, or Google photorealistic (§9). */
+  terrain: TerrainMode;
+  setTerrain: (m: TerrainMode) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -244,8 +281,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [layers, setLayers] = useState<Record<LayerId, boolean>>(() => defaultLayerVisibility("global"));
   const [selection, setSelection] = useState<Selection>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [dock, setDock] = useState<MobileDock>(null);
   const [flyTo, setFlyTo] = useState<AppState["flyTo"]>(null);
   const nonce = useRef(0);
+  // Start from a fixed default so SSR and the first client render agree; the
+  // navigator-based auto-detect (which is absent server-side) runs on mount
+  // below, avoiding a hydration mismatch on the quality control.
+  const [quality, setQuality] = useState<GlobeQuality>("high");
+  const [autoQuality, setAutoQuality] = useState(true);
+  const [atmosphere, setAtmosphere] = useState<AtmospherePreset>("natural");
+  const [lighting, setLighting] = useState<LightingMode>("realtime-sun");
+  const [environment, setEnvironment] = useState(true);
+  const [effects, setEffects] = useState(true);
+  const [trails, setTrails] = useState(true);
+  // With a token, default to real relief for an immediate payoff; without one,
+  // stay on the ellipsoid (the controller enforces this too).
+  const [terrain, setTerrain] = useState<TerrainMode>(() => (ionTokenPresent() ? "world" : "ellipsoid"));
+
+  // Pick a hardware-appropriate starting quality once mounted on the client.
+  useEffect(() => { setQuality(autoDetectQuality()); }, []);
 
   const setMode = useCallback((m: ModeId) => {
     setModeState(m);
@@ -261,7 +315,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setFlyTo({ lat, lon, nonce: nonce.current });
   }, []);
 
-  const select = useCallback((s: Selection) => setSelection(s), []);
+  // Selecting an object reveals its detail sheet on mobile (the inspector lives
+  // in the intel dock); deselecting closes it. Inert on desktop, where the
+  // panels are always shown.
+  const select = useCallback((s: Selection) => {
+    setSelection(s);
+    setDock(s ? "intel" : null);
+  }, []);
 
   // Only poll a feed when its layer is enabled — respects rate limits.
   const aircraft = useFeed<AircraftState>("/api/aircraft", POLL_MS.aircraft, layers.aircraft);
@@ -288,6 +348,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       select,
       searchOpen,
       setSearchOpen,
+      dock,
+      setDock,
       aircraft,
       events,
       news,
@@ -299,8 +361,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       vault,
       flyTo,
       requestFlyTo,
+      quality,
+      setQuality,
+      autoQuality,
+      setAutoQuality,
+      atmosphere,
+      setAtmosphere,
+      lighting,
+      setLighting,
+      environment,
+      setEnvironment,
+      effects,
+      setEffects,
+      trails,
+      setTrails,
+      terrain,
+      setTerrain,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, aircraft, events, news, vessels, weather, markets, conflict, satellites, vault, flyTo, requestFlyTo],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
