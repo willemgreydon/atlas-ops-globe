@@ -61,6 +61,10 @@ export default function Inspector() {
       </div>
       <div className="inspector-body" key={"id" in sel ? `${sel.kind}:${sel.id}` : `country:${sel.iso3}`}>
         {body}
+        {/* Vault-backed kinds carry a persisted lineage keyed by their id.
+            Aircraft are live/upstream (not vault) and country ids don't map 1:1
+            to a vault subject, so lineage is offered only where it resolves. */}
+        {"id" in sel && sel.kind !== "aircraft" && <LineageTrace subject={sel.id} />}
       </div>
     </section>
   );
@@ -113,6 +117,64 @@ function ProvenanceBlock({ p }: { p?: Provenance }) {
           <label>Source</label>
           <a href={safeHttpUrl(p.sourceUrl)} target="_blank" rel="noreferrer noopener">open ↗</a>
         </div>
+      )}
+    </details>
+  );
+}
+
+interface LineageRow {
+  provider?: string;
+  providerRecordId?: string;
+  sourceUrl?: string;
+  retrievedAt?: string;
+  observedAt?: string;
+  pipeline?: string;
+  pipelineVersion?: string;
+  confidence?: number;
+}
+
+/**
+ * On-demand provenance trace for a vault-backed selection (§9, §44): "why does
+ * Atlas believe this?". Lazy-fetches the normalized lineage from the vault only
+ * when the operator expands it — no fetch per selection.
+ */
+function LineageTrace({ subject }: { subject: string }) {
+  const [rows, setRows] = useState<LineageRow[] | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const onToggle = (e: React.SyntheticEvent<HTMLDetailsElement>) => {
+    if (!e.currentTarget.open || loaded) return;
+    setLoaded(true);
+    fetch(`/api/intelligence/provenance?subject=${encodeURIComponent(subject)}`)
+      .then((r) => r.json())
+      .then((j) => setRows((j.provenance as LineageRow[]) ?? []))
+      .catch(() => setRows([]));
+  };
+  return (
+    <details className="provenance lineage" onToggle={onToggle}>
+      <summary>Lineage — why Atlas believes this</summary>
+      {!loaded ? (
+        <p className="muted-note">Expand to trace this record back to its source.</p>
+      ) : rows == null ? (
+        <p className="muted-note">Loading lineage…</p>
+      ) : rows.length === 0 ? (
+        <p className="muted-note">No lineage recorded for this record (live/upstream feed, or not yet re-synced into the vault).</p>
+      ) : (
+        rows.map((p, i) => (
+          <div className="lineage-row" key={`${p.provider}:${p.providerRecordId}:${i}`}>
+            <Field label="Provider" value={p.provider} />
+            <Field label="Record ID" value={p.providerRecordId} />
+            <Field label="Observed" value={p.observedAt ? since(p.observedAt) : undefined} />
+            <Field label="Retrieved" value={p.retrievedAt ? since(p.retrievedAt) : undefined} />
+            <Field label="Pipeline" value={p.pipeline ? `${p.pipeline}@${p.pipelineVersion ?? "?"}` : undefined} />
+            {p.confidence != null && <Field label="Confidence" value={`${Math.round(p.confidence * 100)}%`} />}
+            {safeHttpUrl(p.sourceUrl) && (
+              <div className="field">
+                <label>Source</label>
+                <a href={safeHttpUrl(p.sourceUrl)} target="_blank" rel="noreferrer noopener">open ↗</a>
+              </div>
+            )}
+          </div>
+        ))
       )}
     </details>
   );

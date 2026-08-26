@@ -339,6 +339,8 @@ button:focus-visible, a:focus-visible, input:focus-visible,
 .provenance .field { flex-direction: row; justify-content: space-between; padding: 2px 0; }
 .provenance .field label { font-size: 10.5px; }
 .provenance .field span, .provenance .field a { font-size: 11px; font-family: var(--mono); }
+.lineage-row { padding: 4px 0; }
+.lineage-row + .lineage-row { border-top: 1px dashed var(--line); margin-top: 4px; }
 
 /* ---- Vault-source elements ---- */
 .src-chip { font: 700 8.5px/1 var(--mono); letter-spacing: 0.08em; padding: 2px 5px; border-radius: 4px; color: var(--accent); border: 1px solid rgba(101, 246, 199, 0.4); background: rgba(101, 246, 199, 0.06); }

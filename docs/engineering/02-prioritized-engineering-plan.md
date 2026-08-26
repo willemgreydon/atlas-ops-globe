@@ -127,6 +127,17 @@ Gates green (`typecheck` 0 · `lint` 0 · `test` **123** · `build` 0 · **e2e 1
 
 **Deliberately left (product decision, not a bug to silently flip):** `markets`/`cyber` *layer* `status: "planned"` — these have no globe visualization (markets is a ticker; cyber has data but no globe layer). Flipping them needs a product call on whether they should be globe layers; flagged here rather than guessed.
 
+## Remediation log — pass 4 (2026-08-26): surface lineage in the Inspector (§9, §15, §44)
+
+Made the provenance investment visible — the trust chain now runs data → API → UI end-to-end. Gates green (`typecheck` 0 · `lint` 0 · `test` 123 · `build` 0 · **e2e 11/11**).
+
+| Item | Status | What shipped | Evidence |
+|---|---|---|---|
+| Inspector lineage trace | ✅ done | New `LineageTrace` disclosure in the Inspector for every vault-backed selection (event/news/vessel/weather/satellite). **Lazy-fetches** `/api/intelligence/provenance?subject=<id>` only on expand (no per-selection fetch). Renders provider, record id, observed/retrieved, pipeline@version, confidence, and a scheme-validated source link. Honest empty-state that asserts no unverifiable reason. | `Inspector.tsx` `LineageTrace`, `globals.css` |
+| E2E coverage | ✅ done | New smoke test: provenance endpoint traces `country:AE` and returns 400 (never silent-empty) for a missing subject. | `tests/e2e/smoke.spec.ts` |
+
+This closes the "SIGNAL → … → SOURCE → CONFIDENCE" walk (§44) for vault-backed entities: select an object → expand Lineage → see the provider record and retrieval it came from.
+
 ## Explicitly deferred (do NOT build yet — §39)
 
 Kubernetes, Kafka, Redis, Postgres/PostGIS-now, Elasticsearch, GraphQL, microservices, vector DBs. The local-first SQLite/FTS5 + in-process architecture is adequate for current and near-term volumes; the plan only asks that storage/query **seams** (3.2, 4.1) be drawn so a future migration doesn't contaminate domain logic. Complexity must earn its place.

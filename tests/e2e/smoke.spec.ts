@@ -49,6 +49,17 @@ test("health endpoint reports providers", async ({ request }) => {
   expect(Array.isArray(body.providers)).toBe(true);
 });
 
+test("provenance endpoint traces a subject's lineage", async ({ request }) => {
+  const res = await request.get("/api/intelligence/provenance?subject=country:AE");
+  expect(res.ok()).toBeTruthy();
+  const body = await res.json();
+  expect(body.subject).toBe("country:AE");
+  expect(Array.isArray(body.provenance)).toBe(true);
+  // Missing subject → 400, never a silent empty success.
+  const bad = await request.get("/api/intelligence/provenance");
+  expect(bad.status()).toBe(400);
+});
+
 test("globe settings drive the render engine", async ({ page }) => {
   await page.goto("/");
   await page.locator("canvas").first().waitFor({ timeout: 30_000 });
