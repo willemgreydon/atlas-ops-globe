@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T18:22:46.752Z",
+  "generatedAt": "2026-08-27T09:03:20.280Z",
   "sources": [
     {
       "id": "naturalearth",
@@ -50,6 +50,63 @@
         "maxRetries": 3
       },
       "notes": "Rate-limited to 1 req / 5s; returns plain-text on rejection. Do not store full article bodies."
+    },
+    {
+      "id": "eventregistry",
+      "name": "Event Registry (newsapi.ai)",
+      "domains": [
+        "news",
+        "politics"
+      ],
+      "type": "api",
+      "baseUrl": "https://eventregistry.org/api/v1/",
+      "auth": "api-key",
+      "polling": true,
+      "license": "Event Registry terms; metadata/links only",
+      "commercialUse": "review-required",
+      "redistribution": "restricted",
+      "attributionRequired": true,
+      "attribution": "Event Registry (newsapi.ai)",
+      "enabled": true,
+      "status": "implemented",
+      "envKeys": [
+        "EVENTREGISTRY_API_KEY"
+      ],
+      "acquisition": {
+        "minIntervalSec": 2,
+        "cacheTtlSec": 180,
+        "concurrency": 1,
+        "maxRetries": 3
+      },
+      "notes": "Articles WITH linked concepts (persons/orgs/locations + Wikipedia URIs), sentiment, geolocation — builds the entity graph."
+    },
+    {
+      "id": "newsapi",
+      "name": "NewsAPI.org",
+      "domains": [
+        "news"
+      ],
+      "type": "api",
+      "baseUrl": "https://newsapi.org/v2/",
+      "auth": "api-key",
+      "polling": true,
+      "license": "NewsAPI developer tier — non-commercial, ~24h delayed",
+      "commercialUse": "restricted",
+      "redistribution": "restricted",
+      "attributionRequired": true,
+      "attribution": "NewsAPI.org",
+      "enabled": true,
+      "status": "implemented",
+      "envKeys": [
+        "NEWSAPI_KEY"
+      ],
+      "acquisition": {
+        "minIntervalSec": 2,
+        "cacheTtlSec": 300,
+        "concurrency": 1,
+        "maxRetries": 3
+      },
+      "notes": "Breadth. Free tier is delayed & non-commercial — labelled as such; never shown as real-time."
     },
     {
       "id": "usgs",
@@ -198,7 +255,37 @@
         "cacheTtlSec": 7200,
         "concurrency": 1,
         "maxRetries": 3
-      }
+      },
+      "notes": "Free SGP4 TLEs (FORMAT=tle). Fallback when Space-Track is not configured."
+    },
+    {
+      "id": "spacetrack",
+      "name": "Space-Track.org",
+      "domains": [
+        "space"
+      ],
+      "type": "api",
+      "baseUrl": "https://www.space-track.org/",
+      "auth": "oauth",
+      "polling": true,
+      "license": "US Government (Space-Track user agreement)",
+      "commercialUse": "review-required",
+      "redistribution": "restricted",
+      "attributionRequired": true,
+      "attribution": "Space-Track.org / US Space Force",
+      "enabled": true,
+      "status": "implemented",
+      "envKeys": [
+        "SPACE_TRACK_USERNAME",
+        "SPACE_TRACK_PASSWORD"
+      ],
+      "acquisition": {
+        "minIntervalSec": 60,
+        "cacheTtlSec": 21600,
+        "concurrency": 1,
+        "maxRetries": 3
+      },
+      "notes": "Authoritative full GP/TLE catalogue. Cookie login; strict rate limits — one bounded query per sync."
     },
     {
       "id": "opensky",
@@ -284,31 +371,32 @@
     },
     {
       "id": "acled",
-      "name": "ACLED",
+      "name": "ACLED (Armed Conflict Location & Event Data)",
       "domains": [
         "conflict"
       ],
       "type": "api",
-      "baseUrl": "https://api.acleddata.com/",
+      "baseUrl": "https://acleddata.com/api/acled/read",
       "auth": "oauth",
       "polling": true,
       "license": "ACLED licence",
       "commercialUse": "restricted",
       "redistribution": "restricted",
       "attributionRequired": true,
-      "attribution": "ACLED",
+      "attribution": "ACLED (acleddata.com)",
       "enabled": false,
       "status": "credential-required",
       "envKeys": [
-        "ACLED_CLIENT_ID",
-        "ACLED_CLIENT_SECRET"
+        "ACLED_USERNAME",
+        "ACLED_PASSWORD"
       ],
       "acquisition": {
-        "minIntervalSec": 5,
+        "minIntervalSec": 2,
         "cacheTtlSec": 3600,
-        "concurrency": 2,
+        "concurrency": 1,
         "maxRetries": 3
-      }
+      },
+      "notes": "OAuth2 password grant (client_id=acled), 24h token cached in memory. Political violence, protests, strategic developments with lat/lon + fatalities. CLI: pnpm intel:sync conflict."
     },
     {
       "id": "aisstream",
@@ -445,26 +533,28 @@
     },
     {
       "id": "ofac",
-      "name": "OFAC Sanctions List Service",
+      "name": "OFAC Specially Designated Nationals (SDN)",
       "domains": [
         "sanctions"
       ],
       "type": "bulk",
-      "baseUrl": "https://sanctionslist.ofac.treas.gov/",
+      "baseUrl": "https://www.treasury.gov/ofac/downloads/sdn.csv",
       "auth": "none",
       "polling": true,
       "license": "US Government open data",
       "commercialUse": "allowed",
       "redistribution": "allowed",
-      "attributionRequired": false,
-      "enabled": false,
-      "status": "next",
+      "attributionRequired": true,
+      "attribution": "U.S. Treasury OFAC",
+      "enabled": true,
+      "status": "implemented",
       "acquisition": {
-        "minIntervalSec": 5,
+        "minIntervalSec": 60,
         "cacheTtlSec": 86400,
         "concurrency": 2,
         "maxRetries": 3
-      }
+      },
+      "notes": "SDN list as a reference dataset — NOT a matching engine. Non-spatial. CLI: pnpm intel:sync sanctions."
     }
   ]
 }
