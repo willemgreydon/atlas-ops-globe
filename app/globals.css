@@ -216,7 +216,28 @@ button:focus-visible, a:focus-visible, input:focus-visible,
 .layer-name { display: flex; align-items: center; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 9px; }
 .layer-ctl { display: flex; align-items: center; gap: 7px; }
-.layer-ctl input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+
+/* Toggle switch — replaces the tiny native checkbox everywhere it was used as an
+   on/off control. Far easier to tap on touch devices, and clearer on desktop. */
+.switch, .layer-ctl input[type="checkbox"], .setting-check input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; margin: 0; flex: none; cursor: pointer;
+  position: relative; width: 34px; height: 20px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.22);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.switch::after, .layer-ctl input[type="checkbox"]::after, .setting-check input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 1px; left: 1px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; transition: transform 0.15s ease;
+}
+.switch:checked, .layer-ctl input[type="checkbox"]:checked, .setting-check input[type="checkbox"]:checked {
+  background: var(--accent); border-color: var(--accent);
+}
+.switch:checked::after, .layer-ctl input[type="checkbox"]:checked::after, .setting-check input[type="checkbox"]:checked::after {
+  transform: translateX(14px);
+}
+.switch:focus-visible, .layer-ctl input[type="checkbox"]:focus-visible, .setting-check input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
 .tag-planned { font: 700 9px/1 var(--mono); color: var(--muted-2); border: 1px solid var(--line); padding: 2px 5px; border-radius: 4px; letter-spacing: 0.05em; }
 .feed-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .feed-live { background: var(--accent); } .feed-cached { background: var(--info); } .feed-mock { background: #d59bff; } .feed-offline { background: var(--muted-2); } .feed-delayed { background: var(--warning); }
@@ -450,6 +471,18 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
   .utc { display: none; }
   /* Dev-only FPS panel would overlap the sheets on a phone. */
   .perf-panel { display: none; }
+
+  /* Bigger toggle switches + roomier rows for comfortable thumb taps. */
+  .layer-row { padding: 9px 2px; }
+  .layer-ctl input[type="checkbox"], .setting-check input[type="checkbox"], .switch {
+    width: 44px; height: 26px;
+  }
+  .layer-ctl input[type="checkbox"]::after, .setting-check input[type="checkbox"]::after, .switch::after {
+    width: 22px; height: 22px;
+  }
+  .layer-ctl input[type="checkbox"]:checked::after, .setting-check input[type="checkbox"]:checked::after, .switch:checked::after {
+    transform: translateX(18px);
+  }
 
   /* --- Bottom tab bar: summons the HUD sheets; globe stays full behind it. --- */
   .mobile-nav {

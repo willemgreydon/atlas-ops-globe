@@ -220,6 +220,11 @@ export default function Globe() {
         const name = entity.properties?.ADMIN?.getValue?.();
         if (iso3) { selectRef.current({ kind: "country", iso3, name }); return; }
       }
+      // Tapped something that isn't a selectable object → release the current
+      // selection. This is what keeps a selection "sticky" after the mobile
+      // detail sheet is closed (closing the sheet never deselects) yet still lets
+      // a tap "somewhere besides it" drop focus, per the expected behaviour.
+      if (selectRef.current) selectRef.current(null);
       // A cluster or empty space → zoom toward the clicked point (de-cluster).
       // Uses the ellipsoid pick, never the cluster's entity array (which can be
       // huge and crash the render loop when enumerated).
