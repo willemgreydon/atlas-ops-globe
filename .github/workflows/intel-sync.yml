@@ -1,12 +1,13 @@
 name: Intel Vault Sync
 
-# Keeps the Turso-hosted Intelligence Vault fresh. Runs the ingest pipeline
-# (which hits many upstream APIs and can take minutes — too long for Vercel's
-# hobby function limits) and writes to the Turso primary via a libsql embedded
-# replica. Vercel then reads live from Turso.
+# Keeps the Turso-hosted Intelligence Vault fresh. Writes go through a libsql
+# embedded replica (write-forwarded to the Turso primary, ~tens of ms/statement),
+# so we sync the small, fresh-sensitive domains often and the large, slow-moving
+# ones once a day to stay well inside the job timeout. The initial bulk load is
+# done separately with `pnpm db:seed-turso`.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
-#   TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
+#   TURSO_DATABASE_URL (or TURSO_DB_URL), TURSO_AUTH_TOKEN
 #   OPENSKY_CLIENT_ID, OPENSKY_CLIENT_SECRET, NEWSAPI_KEY, EVENTREGISTRY_API_KEY,
 #   ACLED_USERNAME, ACLED_PASSWORD, MARINETRAFFIC_API_KEY, AISSTREAM_API_KEY,
 #   RELIEFWEB_APPNAME, NVD_API_KEY, SPACE_TRACK_USERNAME, SPACE_TRACK_PASSWORD,
@@ -15,14 +16,14 @@ name: Intel Vault Sync
 
 on:
   schedule:
-    - cron: "0 */3 * * *" # every 3 hours
+    - cron: "0 */3 * * *" # light: fresh-sensitive domains, every 3h
+    - cron: "30 4 * * *" # heavy: slow-moving domains, daily 04:30 UTC
   workflow_dispatch:
     inputs:
-      mode:
-        description: "bootstrap (full seed incl. countries) or update (incremental)"
-        type: choice
-        default: update
-        options: [update, bootstrap]
+      domains:
+        description: "Domains to sync (space-separated), or leave blank for the light set"
+        type: string
+        default: ""
 
 concurrency:
   group: intel-sync
@@ -42,8 +43,18 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Choose domains
+        id: pick
+        run: |
+          if [ -n "${{ github.event.inputs.domains }}" ]; then
+            echo "domains=${{ github.event.inputs.domains }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "30 4 * * *" ]; then
+            echo "domains=space cyber economics sanctions" >> "$GITHUB_OUTPUT"
+          else
+            echo "domains=news disasters markets weather" >> "$GITHUB_OUTPUT"
+          fi
       - name: Sync vault
-        run: pnpm intel:${{ github.event.inputs.mode || 'update' }}
+        run: pnpm intel sync ${{ steps.pick.outputs.domains }}
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL || secrets.TURSO_DB_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
