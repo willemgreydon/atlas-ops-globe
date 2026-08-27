@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { runProvider } from "@/lib/core/provider";
-import { openSkyProvider } from "@/lib/providers/opensky";
+import { openSkyProvider, diagnoseOpenSky } from "@/lib/providers/opensky";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,7 +9,10 @@ export const runtime = "nodejs";
 // forced to mock.
 export const maxDuration = 30;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get("debug") === "1") {
+    return NextResponse.json(await diagnoseOpenSky());
+  }
   const result = await runProvider(openSkyProvider);
   return NextResponse.json({ ...result, rows: result.data });
 }
