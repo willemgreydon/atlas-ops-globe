@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractCountryMentions, locateNews, nearestCountry, resolveCountry } from "@/lib/intel/resolve";
+import { extractCountryMentions, locateCity, locateNews, nearestCountry, resolveCountry } from "@/lib/intel/resolve";
 
 describe("country resolution", () => {
   it("resolves ISO2, ISO3 and names", () => {
@@ -63,5 +63,32 @@ describe("news geolocation", () => {
   it("returns null rather than inventing a location", () => {
     expect(locateNews("Quarterly report published", null)).toBeNull();
     expect(locateNews("", undefined)).toBeNull();
+  });
+});
+
+describe("city geolocation (news coverage over RU/CN/AF/AU)", () => {
+  it("resolves distinctive city names to a precise point + country", () => {
+    const bj = locateCity("New subway line opens in Beijing");
+    expect(bj?.iso2).toBe("CN");
+    expect(bj?.point.lat).toBeCloseTo(39.9, 1);
+    expect(locateCity("Wildfires near Sydney")?.iso2).toBe("AU");
+    expect(locateCity("Protests in Lagos over fuel prices")?.iso2).toBe("NG");
+    expect(locateCity("Flooding hits Saint Petersburg")?.iso2).toBe("RU");
+  });
+
+  it("honours aliases and multi-word city names", () => {
+    expect(locateCity("Fighting reported in Saigon")?.name).toBe("Ho Chi Minh City");
+    expect(locateCity("Summit held in Cape Town")?.iso2).toBe("ZA");
+  });
+
+  it("prefers a named city over a bare country mention in locateNews", () => {
+    // Mentions both the US (source/country) and a specific city — city wins.
+    const loc = locateNews("US envoy lands in Nairobi for talks", "US");
+    expect(loc?.iso2).toBe("KE");
+    expect(loc?.point.lat).toBeCloseTo(-1.29, 1);
+  });
+
+  it("does not match cities inside unrelated words", () => {
+    expect(locateCity("Company posts record earnings")).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { countryCentroids, type CountryCentroid } from "@/data/country-centroids";
 import { haversineKm } from "@/lib/core/geo";
+import { WORLD_CITIES } from "@/lib/intel/geo/gazetteer";
 import type { GeoPoint } from "@/types/domain";
 
 /**
@@ -66,6 +67,39 @@ const NAME_MATCHERS: { re: RegExp; iso2: string }[] = (() => {
     .map((e) => ({ iso2: e.iso2, re: new RegExp(`\\b${e.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i") }));
 })();
 
+// City matchers, longest name first so "New York" wins over any substring and a
+// multi-word city beats a bare country. Each resolves to a precise city point
+// but carries its country's ISO codes (from the centroid table).
+const CITY_MATCHERS: { re: RegExp; iso2: string; name: string; point: GeoPoint }[] = (() => {
+  const entries: { term: string; iso2: string; name: string; point: GeoPoint }[] = [];
+  for (const c of WORLD_CITIES) {
+    const point = { lat: c.lat, lon: c.lon };
+    for (const term of [c.name, ...(c.aliases ?? [])]) entries.push({ term, iso2: c.iso2, name: c.name, point });
+  }
+  entries.sort((a, b) => b.term.length - a.term.length);
+  return entries.map((e) => ({
+    iso2: e.iso2,
+    name: e.name,
+    point: e.point,
+    re: new RegExp(`\\b${e.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i"),
+  }));
+})();
+
+/** First city named in the text → precise point + its country's ISO codes. */
+export function locateCity(text: string): ResolvedCountry | null {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  let best: { iso2: string; name: string; point: GeoPoint } | null = null;
+  let bestIdx = Infinity;
+  for (const m of CITY_MATCHERS) {
+    const idx = lower.search(m.re);
+    if (idx >= 0 && idx < bestIdx) { bestIdx = idx; best = m; }
+  }
+  if (!best) return null;
+  const country = resolveCountry(best.iso2);
+  return { iso2: best.iso2, iso3: country?.iso3 ?? "", name: best.name, point: best.point };
+}
+
 /** Extract distinct country mentions from free text (headlines). Conservative. */
 export function extractCountryMentions(text: string): ResolvedCountry[] {
   if (!text) return [];
@@ -78,12 +112,17 @@ export function extractCountryMentions(text: string): ResolvedCountry[] {
 }
 
 /**
- * Best geographic anchor for a news headline. Prefers the country mentioned
- * *earliest* in the title (headlines lead with their subject), falling back to
- * the article's source country. Returns null when neither resolves — we plot
- * nothing rather than invent a location (mission: honest provenance).
+ * Best geographic anchor for a news headline. Resolution order, most specific
+ * first: a named city (precise point) → the country mentioned *earliest* in the
+ * title (headlines lead with their subject) → the article's source country.
+ * Returns null when nothing resolves — we plot nothing rather than invent a
+ * location (mission: honest provenance). City matching in particular closes the
+ * old gaps over Russia/China/Africa/Australia, where headlines name the city.
  */
 export function locateNews(title: string, sourceCountry?: string | null): ResolvedCountry | null {
+  const city = locateCity(title);
+  if (city) return city;
+
   const mentions = extractCountryMentions(title);
   if (mentions.length > 0) {
     const lower = title.toLowerCase();
