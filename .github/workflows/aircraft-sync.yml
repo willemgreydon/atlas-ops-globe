@@ -1,0 +1,37 @@
+name: Aircraft Sync
+
+# Aircraft can't be fetched live on Vercel — OpenSky blocks datacenter egress.
+# GitHub's runners can reach OpenSky, so we snapshot it here into the Turso
+# `aircraft` table (via a fast @libsql/client batch write, ~seconds), which
+# /api/aircraft serves. Hourly is the sustainable cadence for a private repo's
+# free Action minutes; bump the cron (or make the repo public) for fresher data.
+
+on:
+  schedule:
+    - cron: "7 * * * *" # hourly, offset to avoid colliding with intel-sync
+  workflow_dispatch: {}
+
+concurrency:
+  group: aircraft-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm sync:aircraft
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL || secrets.TURSO_DB_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          OPENSKY_CLIENT_ID: ${{ secrets.OPENSKY_CLIENT_ID }}
+          OPENSKY_CLIENT_SECRET: ${{ secrets.OPENSKY_CLIENT_SECRET }}
