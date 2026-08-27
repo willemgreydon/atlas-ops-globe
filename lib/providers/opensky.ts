@@ -128,45 +128,6 @@ export async function fetchOpenSkyStates(): Promise<AircraftState[]> {
   });
 }
 
-/**
- * Per-stage diagnostic for the aircraft feed — surfaced via `/api/aircraft?debug=1`.
- * Tells us whether OpenSky's OAuth host (auth.opensky-network.org) and/or its API
- * host (opensky-network.org) are reachable from the serverless egress, and how
- * long each takes, without leaking credentials.
- */
-export async function diagnoseOpenSky(): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = {
-    hasCreds: !!(process.env.OPENSKY_CLIENT_ID && process.env.OPENSKY_CLIENT_SECRET),
-  };
-  const t0 = Date.now();
-  let token: string | null = null;
-  try {
-    token = await openSkyToken();
-    out.authMs = Date.now() - t0;
-    out.authOk = true;
-    out.hasToken = !!token;
-  } catch (e) {
-    out.authMs = Date.now() - t0;
-    out.authOk = false;
-    out.authError = e instanceof Error ? e.message : String(e);
-  }
-  const t1 = Date.now();
-  try {
-    const data = await fetchJson<unknown>("https://opensky-network.org/api/states/all", {
-      timeoutMs: 20_000,
-      headers: token ? { authorization: `Bearer ${token}` } : {},
-    });
-    out.statesMs = Date.now() - t1;
-    out.statesOk = true;
-    out.statesCount = ResponseSchema.parse(data).states?.length ?? 0;
-  } catch (e) {
-    out.statesMs = Date.now() - t1;
-    out.statesOk = false;
-    out.statesError = e instanceof Error ? e.message : String(e);
-  }
-  return out;
-}
-
 export const openSkyProvider: ProviderDefinition<AircraftState[]> = {
   key: "opensky",
   label: "OpenSky Network (ADS-B)",
