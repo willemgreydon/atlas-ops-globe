@@ -52,19 +52,29 @@ async function openSkyToken(): Promise<string | null> {
   if (!clientId || !clientSecret) return null; // fall back to anonymous
   if (tokenCache && tokenCache.expiresAt > Date.now() + 30_000) return tokenCache.token;
 
-  const res = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
-  });
-  if (!res.ok) throw new Error(`opensky auth ${res.status}`);
-  const json = (await res.json()) as { access_token: string; expires_in: number };
-  tokenCache = { token: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
-  return json.access_token;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
+  try {
+    const res = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "atlas-ops-globe/0.1",
+      },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`opensky auth ${res.status}`);
+    const json = (await res.json()) as { access_token: string; expires_in: number };
+    tokenCache = { token: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
+    return json.access_token;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function fetchOpenSkyStates(): Promise<AircraftState[]> {

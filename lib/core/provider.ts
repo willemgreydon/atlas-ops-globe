@@ -41,6 +41,25 @@ function countOf(data: unknown): number | undefined {
   return Array.isArray(data) ? data.length : undefined;
 }
 
+/**
+ * Node's `fetch` throws a generic "fetch failed" and hides the real reason
+ * (ECONNRESET, timeout, DNS, TLS…) in `err.cause`. Unwrap it so degraded feeds
+ * report *why* they fell back — essential for diagnosing prod-only failures.
+ */
+function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = (err as { cause?: unknown }).cause;
+  const causeMsg =
+    cause instanceof Error
+      ? cause.message
+      : cause && typeof cause === "object" && "code" in cause
+        ? String((cause as { code: unknown }).code)
+        : cause
+          ? String(cause)
+          : "";
+  return causeMsg ? `${err.message} (${causeMsg})` : err.message;
+}
+
 export async function runProvider<T>(
   def: ProviderDefinition<T>,
   opts: { cacheKey?: string } = {},
@@ -77,7 +96,7 @@ export async function runProvider<T>(
     });
     return envelope(data, def.key, "live", { cached: false, stale: false });
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    const error = describeError(err);
     // Degrade to stale cache if we have any, else mock.
     if (entry) {
       log.warn("provider fetch failed, serving stale cache", {
