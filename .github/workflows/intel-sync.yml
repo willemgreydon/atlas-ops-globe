@@ -16,7 +16,7 @@ name: Intel Vault Sync
 
 on:
   schedule:
-    - cron: "0 */3 * * *" # light: fresh-sensitive domains, every 3h
+    - cron: "0 */6 * * *" # light: disasters only, every 6h (not badge-facing)
     - cron: "30 4 * * *" # heavy: slow-moving domains, daily 04:30 UTC
   workflow_dispatch:
     inputs:
