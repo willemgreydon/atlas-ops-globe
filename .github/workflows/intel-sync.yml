@@ -1,0 +1,66 @@
+name: Intel Vault Sync
+
+# Keeps the Turso-hosted Intelligence Vault fresh. Runs the ingest pipeline
+# (which hits many upstream APIs and can take minutes — too long for Vercel's
+# hobby function limits) and writes to the Turso primary via a libsql embedded
+# replica. Vercel then reads live from Turso.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
+#   OPENSKY_CLIENT_ID, OPENSKY_CLIENT_SECRET, NEWSAPI_KEY, EVENTREGISTRY_API_KEY,
+#   ACLED_USERNAME, ACLED_PASSWORD, MARINETRAFFIC_API_KEY, AISSTREAM_API_KEY,
+#   RELIEFWEB_APPNAME, NVD_API_KEY, SPACE_TRACK_USERNAME, SPACE_TRACK_PASSWORD,
+#   FINNHUB_API_KEY, POLYGON_API_KEY, TWELVEDATA_API_KEY, ALPHAVANTAGE_API_KEY,
+#   NASA_API_KEY
+
+on:
+  schedule:
+    - cron: "0 */3 * * *" # every 3 hours
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "bootstrap (full seed incl. countries) or update (incremental)"
+        type: choice
+        default: update
+        options: [update, bootstrap]
+
+concurrency:
+  group: intel-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Sync vault
+        run: pnpm intel:${{ github.event.inputs.mode || 'update' }}
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          OPENSKY_CLIENT_ID: ${{ secrets.OPENSKY_CLIENT_ID }}
+          OPENSKY_CLIENT_SECRET: ${{ secrets.OPENSKY_CLIENT_SECRET }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          EVENTREGISTRY_API_KEY: ${{ secrets.EVENTREGISTRY_API_KEY }}
+          ACLED_USERNAME: ${{ secrets.ACLED_USERNAME }}
+          ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
+          MARINETRAFFIC_API_KEY: ${{ secrets.MARINETRAFFIC_API_KEY }}
+          AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
+          RELIEFWEB_APPNAME: ${{ secrets.RELIEFWEB_APPNAME }}
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+          SPACE_TRACK_USERNAME: ${{ secrets.SPACE_TRACK_USERNAME }}
+          SPACE_TRACK_PASSWORD: ${{ secrets.SPACE_TRACK_PASSWORD }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+          NASA_API_KEY: ${{ secrets.NASA_API_KEY }}

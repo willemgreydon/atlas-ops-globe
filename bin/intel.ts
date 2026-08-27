@@ -14,7 +14,7 @@
  * Flags: --query <q> --group <g> --limit <n>
  */
 import "./load-env"; // must be first: loads .env.local before any module reads env
-import { getDb, closeDb } from "@/lib/intel/db";
+import { getDb, closeDb, ensureMigrated, isRemote, syncDb } from "@/lib/intel/db";
 import { LATEST_MIGRATION } from "@/lib/intel/migrations";
 import { tableCounts } from "@/lib/intel/repositories";
 import { SOURCES } from "@/lib/intel/sources";
@@ -71,6 +71,11 @@ function printStats(): void {
 async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positional, opts } = parseFlags(rest);
+
+  // Apply schema up-front. Locally getDb() self-migrates; against a Turso
+  // primary (TURSO_DATABASE_URL set) the read path deliberately doesn't, so the
+  // CLI is where the primary gets migrated before any writes.
+  if (cmd && cmd !== "sources") ensureMigrated();
 
   switch (cmd) {
     case "status": {
@@ -141,6 +146,9 @@ async function main(): Promise<void> {
     default:
       console.log("commands: status | sources | sync <domain>|--all | bootstrap | update | stats | validate | index");
   }
+  // Flush the embedded replica to the Turso primary so a write CLI run is
+  // durable before the process exits.
+  if (isRemote()) syncDb();
   closeDb();
 }
 

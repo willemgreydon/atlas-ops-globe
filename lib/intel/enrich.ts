@@ -3,7 +3,7 @@ import { upsertRelationship } from "./repositories";
 import { prov } from "./provenance";
 import { IdOf } from "./ids";
 import type { RelationshipBasis, RelationType } from "./ontology";
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "./db";
 
 /**
  * Enrichment helpers: create conservative, provenance-labelled relationships.
@@ -16,7 +16,7 @@ export function relate(
   to: string,
   basis: RelationshipBasis,
   confidence: number,
-  db?: DatabaseSync,
+  db?: Db,
 ): void {
   const id = stableId("rel", from, type, to);
   // Every edge is DERIVED by this pipeline from the `from` record, whose own
@@ -30,11 +30,11 @@ export function relate(
 }
 
 /** article OCCURRED_IN / MENTIONS country (reported basis — from source metadata). */
-export function linkArticleCountry(articleId: string, iso2: string, db?: DatabaseSync): void {
+export function linkArticleCountry(articleId: string, iso2: string, db?: Db): void {
   relate(articleId, "OCCURRED_IN", IdOf.country(iso2), "reported", 0.7, db);
 }
 
 /** event OCCURRED_IN country (spatially resolved). */
-export function linkEventCountry(eventId: string, iso2: string, basis: RelationshipBasis, db?: DatabaseSync): void {
+export function linkEventCountry(eventId: string, iso2: string, basis: RelationshipBasis, db?: Db): void {
   relate(eventId, "OCCURRED_IN", IdOf.country(iso2), basis, basis === "reported" ? 0.85 : 0.6, db);
 }

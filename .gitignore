@@ -20,6 +20,8 @@ coverage
 /data/*.db
 /data/*.db-shm
 /data/*.db-wal
+# libsql embedded replica (Turso) + its sidecar files
+/data/replica.db*
 # Raw provider snapshots + generated artifacts that churn every run
 /intelligence/**/raw/
 /intelligence/**/snapshots/

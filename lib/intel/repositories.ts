@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "./db";
 import { getDb } from "./db";
 import type {
   VaultCountry, VaultEconomicObs, VaultEntity, VaultEvent, VaultMarketObs, VaultNews,
@@ -15,7 +15,7 @@ import type {
 const J = (v: unknown) => JSON.stringify(v ?? null);
 const now = () => new Date().toISOString();
 
-function insertProvenance(db: DatabaseSync, subjectId: string, records: VaultProvenance[]): void {
+function insertProvenance(db: Db, subjectId: string, records: VaultProvenance[]): void {
   if (!records?.length) return;
   db.prepare("DELETE FROM provenance WHERE subject_id = ?").run(subjectId);
   const stmt = db.prepare(
@@ -257,7 +257,7 @@ export function upsertMarketObs(o: VaultMarketObs, db = getDb()): void {
 // --------------------------------------------------------------------------
 // FTS helper
 // --------------------------------------------------------------------------
-function syncFts(db: DatabaseSync, table: string, id: string, a: string, b: string): void {
+function syncFts(db: Db, table: string, id: string, a: string, b: string): void {
   db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
   db.prepare(`INSERT INTO ${table} (id, ${table === "fts_entities" ? "name, aliases" : "title, body"}) VALUES (?,?,?)`)
     .run(id, a, b);

@@ -39,8 +39,40 @@ const I = {
 const RELIABILITY = 0.85;
 const FRESHNESS_SLA_S = 30;
 
+// OpenSky migrated to OAuth2 client-credentials in 2025; anonymous access is
+// now throttled to near-uselessness (a few requests/day). Authenticated
+// clients get ~4000 credits/day. Token lives ~30 min — cache it per process.
+const TOKEN_URL =
+  "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token";
+let tokenCache: { token: string; expiresAt: number } | null = null;
+
+async function openSkyToken(): Promise<string | null> {
+  const clientId = process.env.OPENSKY_CLIENT_ID;
+  const clientSecret = process.env.OPENSKY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null; // fall back to anonymous
+  if (tokenCache && tokenCache.expiresAt > Date.now() + 30_000) return tokenCache.token;
+
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+  if (!res.ok) throw new Error(`opensky auth ${res.status}`);
+  const json = (await res.json()) as { access_token: string; expires_in: number };
+  tokenCache = { token: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
+  return json.access_token;
+}
+
 export async function fetchOpenSkyStates(): Promise<AircraftState[]> {
-  const data = await fetchJson<unknown>("https://opensky-network.org/api/states/all");
+  const token = await openSkyToken();
+  const data = await fetchJson<unknown>("https://opensky-network.org/api/states/all", {
+    timeoutMs: 15_000,
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
   const parsed = ResponseSchema.parse(data);
   const now = Date.now();
 

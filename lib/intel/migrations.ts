@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "./db";
 
 /**
  * Versioned, forward-only migrations. Each runs once inside a transaction and
@@ -183,7 +183,7 @@ const MIGRATIONS: Migration[] = [
   },
 ];
 
-export function runMigrations(db: DatabaseSync): number {
+export function runMigrations(db: Db): number {
   db.exec("CREATE TABLE IF NOT EXISTS _migrations (id INTEGER PRIMARY KEY, name TEXT, applied_at TEXT);");
   const applied = new Set(
     (db.prepare("SELECT id FROM _migrations").all() as { id: number }[]).map((r) => r.id),
