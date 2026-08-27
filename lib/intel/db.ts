@@ -44,9 +44,14 @@ export function dbPath(): string {
   return process.env.INTEL_DB_PATH || resolve(process.cwd(), "data", "intelligence.db");
 }
 
+/** The configured Turso primary URL, if any (accepts either env var name). */
+export function tursoUrl(): string | undefined {
+  return process.env.TURSO_DATABASE_URL || process.env.TURSO_DB_URL || undefined;
+}
+
 /** True when a Turso primary is configured (i.e. we run as an embedded replica). */
 export function isRemote(): boolean {
-  return !!process.env.TURSO_DATABASE_URL;
+  return !!tursoUrl();
 }
 
 function replicaPath(): string {
@@ -56,7 +61,7 @@ function replicaPath(): string {
 }
 
 function open(): Db {
-  const url = process.env.TURSO_DATABASE_URL;
+  const url = tursoUrl();
   if (url) {
     const path = replicaPath();
     mkdirSync(dirname(path), { recursive: true });

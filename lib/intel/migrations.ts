@@ -183,6 +183,29 @@ const MIGRATIONS: Migration[] = [
   },
 ];
 
+/**
+ * Split a migration body into individual statements. libsql — and in
+ * particular Turso embedded replicas — reject multi-statement `exec()` with
+ * `InvalidParserState`, so each statement must be issued on its own. Our schema
+ * SQL has no semicolons inside literals/triggers, so a plain `;` split is safe.
+ */
+function splitStatements(sql: string): string[] {
+  // Strip `-- …` line comments first: a comment may itself contain a semicolon
+  // (e.g. "schema present; populated later"), which would otherwise split into
+  // a bogus statement. Our schema has no `--` inside string literals.
+  const stripped = sql
+    .split("\n")
+    .map((line) => {
+      const i = line.indexOf("--");
+      return i >= 0 ? line.slice(0, i) : line;
+    })
+    .join("\n");
+  return stripped
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 export function runMigrations(db: Db): number {
   db.exec("CREATE TABLE IF NOT EXISTS _migrations (id INTEGER PRIMARY KEY, name TEXT, applied_at TEXT);");
   const applied = new Set(
@@ -192,14 +215,14 @@ export function runMigrations(db: Db): number {
   const record = db.prepare("INSERT INTO _migrations (id, name, applied_at) VALUES (?, ?, ?)");
   for (const m of MIGRATIONS) {
     if (applied.has(m.id)) continue;
-    db.exec("BEGIN");
     try {
-      db.exec(m.up);
+      // One statement per exec (replica-safe). The migration is recorded only
+      // after all its statements land, so a mid-migration failure reruns from
+      // the top — every statement is additive / IF NOT EXISTS, so that's safe.
+      for (const stmt of splitStatements(m.up)) db.exec(stmt);
       record.run(m.id, m.name, new Date().toISOString());
-      db.exec("COMMIT");
       count++;
     } catch (err) {
-      db.exec("ROLLBACK");
       throw new Error(`migration ${m.id} (${m.name}) failed: ${(err as Error).message}`);
     }
   }
