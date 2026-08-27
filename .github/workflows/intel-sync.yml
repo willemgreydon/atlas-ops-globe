@@ -16,7 +16,7 @@ name: Intel Vault Sync
 
 on:
   schedule:
-    - cron: "0 */12 * * *" # light: disasters only, every 12h (not badge-facing; slow write path)
+    - cron: "0 */3 * * *" # light: news + disasters, every 3h
     - cron: "30 4 * * *" # heavy: slow-moving domains, daily 04:30 UTC
   workflow_dispatch:
     inputs:
@@ -49,22 +49,22 @@ jobs:
           if [ -n "${{ github.event.inputs.domains }}" ]; then
             echo "domains=${{ github.event.inputs.domains }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "30 4 * * *" ]; then
-            # Heavy daily: satellite TLEs (epoch ages in ~2 days) + conflict events.
-            # Kept deliberately small: the embedded-replica write path forwards each
-            # statement to the Turso primary (~seconds each), so high-row domains
-            # (sanctions ~19k, cyber ~1.9k, the news entity graph ~27 min) must NOT
-            # be scheduled here — refresh those via manual dispatch or the bulk
-            # `db:seed-turso` path. markets/weather/news/events are served live.
-            echo "domains=space conflict" >> "$GITHUB_OUTPUT"
+            # Heavy daily: slow-moving reference. Cheap now that INTEL_STAGED runs
+            # ingestors locally and bulk-pushes to Turso in one ~20s batch.
+            echo "domains=space cyber economics sanctions conflict" >> "$GITHUB_OUTPUT"
           else
-            # Light: only the disaster feed (small delta; keeps the global
-            # snapshot's active-disaster count current). Everything badge-facing is
-            # live-at-request, so nothing else needs a frequent vault sync.
-            echo "domains=disasters" >> "$GITHUB_OUTPUT"
+            # Light: news (keeps the persons/orgs entity graph → Trending Entities
+            # fresh) + disasters (global snapshot count). markets/weather/events
+            # are served live-at-request, so they need no vault sync.
+            echo "domains=news disasters" >> "$GITHUB_OUTPUT"
           fi
       - name: Sync vault
         run: pnpm intel sync ${{ steps.pick.outputs.domains }}
         env:
+          # Staged fast path: ingest against a local pulled copy, then bulk-push
+          # to Turso via @libsql/client batch (~20s) instead of write-forwarding
+          # every statement through the embedded replica (news was ~27 min).
+          INTEL_STAGED: "1"
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL || secrets.TURSO_DB_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           OPENSKY_CLIENT_ID: ${{ secrets.OPENSKY_CLIENT_ID }}

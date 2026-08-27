@@ -14,7 +14,8 @@
  * Flags: --query <q> --group <g> --limit <n>
  */
 import "./load-env"; // must be first: loads .env.local before any module reads env
-import { getDb, closeDb, ensureMigrated, isRemote, syncDb } from "@/lib/intel/db";
+import { getDb, closeDb, ensureMigrated, isRemote, isStaged, replicaPath, syncDb } from "@/lib/intel/db";
+import { pushLocalToTurso } from "@/lib/intel/turso-sync";
 import { LATEST_MIGRATION } from "@/lib/intel/migrations";
 import { tableCounts } from "@/lib/intel/repositories";
 import { SOURCES } from "@/lib/intel/sources";
@@ -146,10 +147,18 @@ async function main(): Promise<void> {
     default:
       console.log("commands: status | sources | sync <domain>|--all | bootstrap | update | stats | validate | index");
   }
-  // Flush the embedded replica to the Turso primary so a write CLI run is
-  // durable before the process exits.
-  if (isRemote()) syncDb();
-  closeDb();
+  // Persist writes to the Turso primary. Staged mode ran the ingestors against a
+  // local pulled copy (fast) — flush it, then bulk-push in ~2 min via batch. The
+  // default path uses the embedded replica, already write-forwarded per statement.
+  const WRITE_CMDS = new Set(["sync", "bootstrap", "update"]);
+  if (isStaged() && cmd && WRITE_CMDS.has(cmd)) {
+    closeDb(); // flush local writes to the file before reading it back
+    const n = await pushLocalToTurso(replicaPath(), { log: true });
+    console.log(`\nStaged push: ${n.toLocaleString()} rows → Turso primary.`);
+  } else {
+    if (isRemote()) syncDb();
+    closeDb();
+  }
 }
 
 main().catch((err) => { console.error("intel CLI failed:", err); process.exit(1); });

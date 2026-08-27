@@ -54,14 +54,35 @@ export function isRemote(): boolean {
   return !!tursoUrl();
 }
 
-function replicaPath(): string {
+export function replicaPath(): string {
   if (process.env.INTEL_REPLICA_PATH) return process.env.INTEL_REPLICA_PATH;
   // On Vercel /tmp is the only writable location; keep it beside data locally.
   return process.env.VERCEL ? "/tmp/atlas-intel.db" : resolve(process.cwd(), "data", "replica.db");
 }
 
+/** Staged fast-sync: run ingestors locally, then bulk-push (see turso-sync.ts). */
+export function isStaged(): boolean {
+  return process.env.INTEL_STAGED === "1" && isRemote();
+}
+
 function open(): Db {
   const url = tursoUrl();
+  if (url && isStaged()) {
+    // Staged write path (CLI sync jobs). Pull the primary into a local file once,
+    // then hand back that file as a PLAIN local DB so every write is a fast local
+    // write — NOT write-forwarded per statement. bin/intel.ts bulk-pushes the
+    // result back to Turso via @libsql/client afterwards.
+    const path = replicaPath();
+    mkdirSync(dirname(path), { recursive: true });
+    const replica = new Libsql(path, { syncUrl: url, authToken: process.env.TURSO_AUTH_TOKEN });
+    try {
+      replica.sync?.();
+    } catch {
+      /* first boot / offline: start from whatever the local file has */
+    }
+    replica.close();
+    return new Libsql(path); // reopen without syncUrl → local-speed writes
+  }
   if (url) {
     const path = replicaPath();
     mkdirSync(dirname(path), { recursive: true });
