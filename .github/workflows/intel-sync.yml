@@ -49,9 +49,18 @@ jobs:
           if [ -n "${{ github.event.inputs.domains }}" ]; then
             echo "domains=${{ github.event.inputs.domains }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "30 4 * * *" ]; then
-            echo "domains=space cyber economics sanctions" >> "$GITHUB_OUTPUT"
+            # Heavy daily: satellite TLEs (epoch ages in ~2 days) + conflict events.
+            # Kept deliberately small: the embedded-replica write path forwards each
+            # statement to the Turso primary (~seconds each), so high-row domains
+            # (sanctions ~19k, cyber ~1.9k, the news entity graph ~27 min) must NOT
+            # be scheduled here — refresh those via manual dispatch or the bulk
+            # `db:seed-turso` path. markets/weather/news/events are served live.
+            echo "domains=space conflict" >> "$GITHUB_OUTPUT"
           else
-            echo "domains=news disasters markets weather" >> "$GITHUB_OUTPUT"
+            # Light: only the disaster feed (small delta; keeps the global
+            # snapshot's active-disaster count current). Everything badge-facing is
+            # live-at-request, so nothing else needs a frequent vault sync.
+            echo "domains=disasters" >> "$GITHUB_OUTPUT"
           fi
       - name: Sync vault
         run: pnpm intel sync ${{ steps.pick.outputs.domains }}

@@ -1,14 +1,18 @@
 name: Aircraft Sync
 
-# Aircraft can't be fetched live on Vercel — OpenSky blocks datacenter egress.
-# GitHub's runners can reach OpenSky, so we snapshot it here into the Turso
-# `aircraft` table (via a fast @libsql/client batch write, ~seconds), which
-# /api/aircraft serves. Hourly is the sustainable cadence for a private repo's
-# free Action minutes; bump the cron (or make the repo public) for fresher data.
+# OpenSky global baseline for the aircraft layer.
+#
+# /api/aircraft now gets real-time data from adsb.lol, fetched live from Vercel
+# (adsb.lol permits datacenter egress; OpenSky does not). This snapshot is only
+# the GLOBAL BASELINE merged underneath it — it fills the regions/oceans the
+# community adsb.lol receiver footprint misses (Russia, China, open ocean).
+# Because it is no longer the source of freshness, a few-hourly cadence is plenty
+# and keeps us well inside the free Action-minute budget. Fast @libsql/client
+# batch write, ~seconds. Trigger manually any time to refresh the baseline.
 
 on:
   schedule:
-    - cron: "7 * * * *" # hourly, offset to avoid colliding with intel-sync
+    - cron: "7 */6 * * *" # every 6h, offset to avoid colliding with intel-sync
   workflow_dispatch: {}
 
 concurrency:
