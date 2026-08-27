@@ -1,17 +1,21 @@
 import type { NextConfig } from "next";
 
 // Next.js 16 uses Turbopack by default. Cesium ships prebuilt worker/asset
-// bundles that we copy into /public/cesium via scripts/copy-cesium.mjs, so no
-// custom bundler rules are required. An empty `turbopack` config silences the
-// "webpack config with no turbopack config" build error.
+// bundles that we copy into /public/cesium via scripts/copy-cesium.mjs.
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["resium", "cesium"],
+  transpilePackages: ["resium"],
   // `libsql` is a native module (Turso/SQLite). It must be resolved at runtime
   // from node_modules, never bundled/traced by Turbopack — externalize it so
   // the prebuilt .node binary loads correctly in the serverless function.
   serverExternalPackages: ["libsql"],
-  turbopack: {},
+  turbopack: {
+    resolveAlias: {
+      // Drop Cesium's Gaussian-Splat WASM loader — its inlined binary breaks
+      // Turbopack's template-literal codegen and hangs the globe. See the stub.
+      "@spz-loader/core": "./lib/stubs/spz-loader.ts",
+    },
+  },
   // Cesium's runtime assets (~7.7 MB of workers/wasm/textures) and the country
   // GeoJSON live under /public, which Next otherwise serves as
   // `max-age=0, must-revalidate` — re-checked on every load, the main drag on
