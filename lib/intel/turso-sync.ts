@@ -37,6 +37,33 @@ export const COPY_ORDER = [
   "fts_entities", "fts_news", "fts_events",
 ];
 
+// Tables each domain's ingestor writes. Pushing ONLY these (not the whole vault)
+// keeps write churn small, which matters a lot: every rewritten row forces every
+// Vercel embedded replica to re-pull it on cold start — a full-vault push
+// re-pulls all ~35k rows and blew the Turso free read quota. Missing a table
+// only leaves it stale (INSERT OR REPLACE never deletes), never corrupt.
+export const DOMAIN_TABLES: Record<string, string[]> = {
+  news: ["entities", "persons", "organizations", "news_articles", "news_stories", "relationships", "provenance", "fts_entities", "fts_news"],
+  disasters: ["events", "provenance", "fts_events"],
+  conflict: ["events", "provenance", "fts_events"],
+  space: ["space_objects", "provenance"],
+  cyber: ["vulnerabilities", "provenance"],
+  sanctions: ["sanctions", "provenance"],
+  economics: ["economic_observations", "provenance"],
+  countries: ["countries", "entities", "provenance", "fts_entities"],
+  weather: ["weather_observations", "provenance"],
+  markets: ["market_observations", "provenance"],
+  maritime: ["vessels", "provenance"],
+  aviation: ["aircraft", "provenance"],
+};
+
+/** Union of tables touched by the given domains, in safe copy order. */
+export function tablesForDomains(domains: string[]): string[] {
+  const want = new Set<string>();
+  for (const d of domains) for (const t of DOMAIN_TABLES[d] ?? []) want.add(t);
+  return COPY_ORDER.filter((t) => want.has(t));
+}
+
 type RemoteClient = ReturnType<typeof createClient>;
 
 function tableExists(local: LocalReader, name: string): boolean {
@@ -68,18 +95,24 @@ async function copyTable(local: LocalReader, remote: RemoteClient, table: string
   return rows.length;
 }
 
-/** Push every vault table from a local libsql file to the Turso primary. */
+/**
+ * Push vault tables from a local libsql file to the Turso primary. `tables`
+ * defaults to the whole vault (the one-off seed); the staged sync passes only
+ * the touched tables to keep replica-invalidation churn — and thus Turso reads —
+ * bounded.
+ */
 export async function pushLocalToTurso(
   localPath: string,
-  opts: { url?: string; authToken?: string; log?: boolean } = {},
+  opts: { url?: string; authToken?: string; log?: boolean; tables?: string[] } = {},
 ): Promise<number> {
   const url = opts.url ?? process.env.TURSO_DATABASE_URL ?? process.env.TURSO_DB_URL;
   if (!url) throw new Error("TURSO_DATABASE_URL / TURSO_DB_URL not set");
+  const tables = opts.tables ?? COPY_ORDER;
   const local = new Libsql(localPath);
   const remote = createClient({ url, authToken: opts.authToken ?? process.env.TURSO_AUTH_TOKEN });
   try {
     let total = 0;
-    for (const table of COPY_ORDER) total += await copyTable(local, remote, table, opts.log);
+    for (const table of tables) total += await copyTable(local, remote, table, opts.log);
     return total;
   } finally {
     remote.close();

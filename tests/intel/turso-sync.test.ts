@@ -4,7 +4,7 @@ import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { runMigrations } from "@/lib/intel/migrations";
-import { pushLocalToTurso } from "@/lib/intel/turso-sync";
+import { pushLocalToTurso, tablesForDomains, COPY_ORDER } from "@/lib/intel/turso-sync";
 
 /**
  * Verifies the batch push engine copies a local libsql file into a "remote"
@@ -53,5 +53,29 @@ describe("pushLocalToTurso", () => {
     check.close();
     expect(country.name).toBe("Testland"); // overwritten, not duplicated
     expect(evt.title).toBe("Test quake");
+  });
+});
+
+describe("tablesForDomains (delta push scoping)", () => {
+  it("returns only the touched tables, in safe copy order, deduped", () => {
+    const t = tablesForDomains(["disasters"]);
+    expect(t).toEqual(["events", "provenance", "fts_events"]);
+    // Must never drag in the big static tables for a small sync.
+    expect(t).not.toContain("sanctions");
+    expect(t).not.toContain("space_objects");
+  });
+
+  it("unions multiple domains without duplicates and preserves COPY_ORDER", () => {
+    const t = tablesForDomains(["news", "disasters"]);
+    expect(new Set(t).size).toBe(t.length); // no dupes (provenance shared)
+    // ordering follows COPY_ORDER
+    const idx = t.map((x) => COPY_ORDER.indexOf(x));
+    expect(idx).toEqual([...idx].sort((a, b) => a - b));
+    expect(t).toContain("news_articles");
+    expect(t).toContain("events");
+  });
+
+  it("is empty for an unknown domain (caller falls back to a full push)", () => {
+    expect(tablesForDomains(["bogus"])).toEqual([]);
   });
 });

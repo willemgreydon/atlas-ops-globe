@@ -49,9 +49,12 @@ jobs:
           if [ -n "${{ github.event.inputs.domains }}" ]; then
             echo "domains=${{ github.event.inputs.domains }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "30 4 * * *" ]; then
-            # Heavy daily: slow-moving reference. Cheap now that INTEL_STAGED runs
-            # ingestors locally and bulk-pushes to Turso in one ~20s batch.
-            echo "domains=space cyber economics sanctions conflict" >> "$GITHUB_OUTPUT"
+            # Heavy daily: the domains that actually change (satellite TLEs age in
+            # ~2 days; ACLED adds conflict events). Near-static reference data
+            # (sanctions ~19k, cyber, economics) is intentionally OFF-schedule —
+            # re-pushing it churns replicas and burns Turso reads for no benefit;
+            # refresh it manually when needed.
+            echo "domains=space conflict" >> "$GITHUB_OUTPUT"
           else
             # Light: news (keeps the persons/orgs entity graph → Trending Entities
             # fresh) + disasters (global snapshot count). markets/weather/events

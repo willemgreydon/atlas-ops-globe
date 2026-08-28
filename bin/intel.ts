@@ -15,7 +15,7 @@
  */
 import "./load-env"; // must be first: loads .env.local before any module reads env
 import { getDb, closeDb, ensureMigrated, isRemote, isStaged, replicaPath, syncDb } from "@/lib/intel/db";
-import { pushLocalToTurso } from "@/lib/intel/turso-sync";
+import { DOMAIN_TABLES, pushLocalToTurso, tablesForDomains } from "@/lib/intel/turso-sync";
 import { LATEST_MIGRATION } from "@/lib/intel/migrations";
 import { tableCounts } from "@/lib/intel/repositories";
 import { SOURCES } from "@/lib/intel/sources";
@@ -78,6 +78,9 @@ async function main(): Promise<void> {
   // CLI is where the primary gets migrated before any writes.
   if (cmd && cmd !== "sources") ensureMigrated();
 
+  // Domains touched by this run — drives the staged delta push (see the tail).
+  let syncedDomains: string[] = [];
+
   switch (cmd) {
     case "status": {
       getDb();
@@ -95,6 +98,7 @@ async function main(): Promise<void> {
     case "sync": {
       const domains = opts.all ? Object.keys(INGESTORS) : positional;
       if (domains.length === 0) { console.error("usage: intel sync <domain> | --all"); process.exit(1); }
+      syncedDomains = domains;
       console.log("Syncing:", domains.join(", "));
       const reports = await runDomains(domains, opts);
       writeStatus(reports);
@@ -104,6 +108,7 @@ async function main(): Promise<void> {
     }
     case "bootstrap": {
       console.log("Bootstrapping baseline intelligence vault…");
+      syncedDomains = BOOTSTRAP_ORDER;
       emitCoreArtifacts();
       const reports = await runDomains(BOOTSTRAP_ORDER, opts);
       writeStatus(reports);
@@ -115,6 +120,7 @@ async function main(): Promise<void> {
     }
     case "update": {
       console.log("Incremental update…");
+      syncedDomains = UPDATE_ORDER;
       const reports = await runDomains(UPDATE_ORDER, opts);
       writeStatus(reports);
       emitIndexes();
@@ -153,8 +159,14 @@ async function main(): Promise<void> {
   const WRITE_CMDS = new Set(["sync", "bootstrap", "update"]);
   if (isStaged() && cmd && WRITE_CMDS.has(cmd)) {
     closeDb(); // flush local writes to the file before reading it back
-    const n = await pushLocalToTurso(replicaPath(), { log: true });
-    console.log(`\nStaged push: ${n.toLocaleString()} rows → Turso primary.`);
+    // Delta push: only the touched tables, to bound replica-invalidation churn
+    // (a full-vault push re-pulls ~35k rows into every cold Vercel replica and
+    // exhausts the Turso free read quota). Fall back to a full push only if a
+    // synced domain has no known table set.
+    const known = syncedDomains.length > 0 && syncedDomains.every((d) => d in DOMAIN_TABLES);
+    const tables = known ? tablesForDomains(syncedDomains) : undefined;
+    const n = await pushLocalToTurso(replicaPath(), { log: true, tables });
+    console.log(`\nStaged push: ${n.toLocaleString()} rows across ${tables ? tables.length : "all"} tables → Turso primary.`);
   } else {
     if (isRemote()) syncDb();
     closeDb();
