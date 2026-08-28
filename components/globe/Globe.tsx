@@ -22,7 +22,7 @@ import {
 import { ImageryLayer, Viewer, type CesiumComponentRef } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { loadSgp4 } from "@/lib/sgp4-client";
-import { useApp, type Airport, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type Airport, type AirQualityRow, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import type { AircraftState, NewsItem, Severity, WorldEvent } from "@/types/domain";
 import { configureScene } from "@/lib/globe/scene";
@@ -484,6 +484,24 @@ export default function Globe() {
     return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); airportsLayer.current = null; };
   }, [ready, app.layers.airports]);
 
+  // --- air-quality layer (Open-Meteo US AQI at world cities) ----------------
+  const airQualityLayer = useRef<StaticLayer<AirQualityRow> | null>(null);
+  const airQualityRows = useRef<AirQualityRow[]>([]);
+  useEffect(() => {
+    airQualityRows.current = app.airquality.rows;
+    airQualityLayer.current?.update(app.airquality.rows);
+  }, [app.airquality.rows]);
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!ready || !viewer || !app.layers.airquality) return;
+    const layer = createAirQualityLayer(viewer);
+    layer.mount();
+    layer.update(airQualityRows.current);
+    airQualityLayer.current = layer;
+    lodRef.current?.register("airquality", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); airQualityLayer.current = null; };
+  }, [ready, app.layers.airquality]);
+
   // --- satellites layer (SGP4 via render manager, continuous smooth motion) --
   // satellite.js is code-split; load it once the space layer is first enabled.
   const [sgp4, setSgp4] = useState<Sgp4 | null>(null);
@@ -520,7 +538,7 @@ export default function Globe() {
   const feedsRef = useRef({
     aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
     conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
-    airports: app.airports.rows,
+    airports: app.airports.rows, airquality: app.airquality.rows,
   });
   useEffect(() => {
     // Deliberate latest-value ref: the focus/hover effects read these rows to
@@ -532,9 +550,9 @@ export default function Globe() {
     feedsRef.current = {
       aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
       conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
-      airports: app.airports.rows,
+      airports: app.airports.rows, airquality: app.airquality.rows,
     };
-  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows, app.airports.rows]);
+  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows, app.airports.rows, app.airquality.rows]);
 
   // --- focus mode: follow (moving) or fly-to (static) the selection ---------
   // Moving objects (aircraft/vessel/satellite) are *tracked* (§19): the camera
@@ -636,6 +654,13 @@ export default function Globe() {
         orbitTrail.current?.hide();
         break;
       }
+      case "airquality": {
+        untrack();
+        const aq = feeds.airquality.find((r) => r.id === sel.id);
+        if (aq) { cam.flyToPoint(aq.lon, aq.lat, 300_000); focus?.showAt(Cartesian3.fromDegrees(aq.lon, aq.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
       default:
         untrack();
         orbitTrail.current?.hide();
@@ -722,6 +747,7 @@ interface HoverFeeds {
   weather: WeatherRow[];
   satellites: SatelliteRow[];
   airports: Airport[];
+  airquality: AirQualityRow[];
 }
 
 /** Resolve a picked scene object into a hover tooltip payload (or null). */
@@ -773,6 +799,10 @@ function hoverForSelection(sel: NonNullable<Selection>, feeds: HoverFeeds, x: nu
     case "airport": {
       const ap = feeds.airports.find((r) => r.id === sel.id);
       return ap ? { x, y, kind: "AIRPORT", title: ap.name, subtitle: join([ap.iata, ap.country]), color: LAYER_BY_ID.airports.color } : null;
+    }
+    case "airquality": {
+      const aq = feeds.airquality.find((r) => r.id === sel.id);
+      return aq ? { x, y, kind: "AIR QUALITY", title: `${aq.place} · AQI ${aq.aqi}`, subtitle: aq.pm25 != null ? `PM2.5 ${Math.round(aq.pm25)}` : undefined, color: aqiColor(aq.aqi).toCssColorString() } : null;
     }
     default:
       return null;
@@ -912,6 +942,53 @@ function airportGraphics(a: Airport): CesiumEntity.ConstructorOptions {
       // Fade the smaller airports out when zoomed far so the globe isn't a wall
       // of dots; larger hubs stay visible longer.
       scaleByDistance: new NearFarScalar(3.0e6, 1.0, 2.0e7, a.large ? 0.5 : 0.25),
+    },
+  };
+}
+
+// US AQI colour scale (good → hazardous).
+function aqiColor(aqi: number): Color {
+  if (aqi <= 50) return Color.fromCssColorString("#00e400");
+  if (aqi <= 100) return Color.fromCssColorString("#e6d200");
+  if (aqi <= 150) return Color.fromCssColorString("#ff7e00");
+  if (aqi <= 200) return Color.fromCssColorString("#ff2d2d");
+  if (aqi <= 300) return Color.fromCssColorString("#8f3f97");
+  return Color.fromCssColorString("#7e0023");
+}
+
+function createAirQualityLayer(viewer: CesiumViewer): StaticLayer<AirQualityRow> {
+  return new StaticLayer<AirQualityRow>(viewer, selectionMap, {
+    name: "airquality",
+    position: (a) => Cartesian3.fromDegrees(a.lon, a.lat, 0),
+    build: (a) => airQualityGraphics(a),
+    selection: (a) => ({ kind: "airquality", id: a.id }),
+    version: (a) => String(a.aqi),
+    onUpdate: (ent, a) => {
+      if (ent.point) ent.point.color = new ConstantProperty(aqiColor(a.aqi).withAlpha(0.9));
+      if (ent.label) ent.label.text = new ConstantProperty(String(a.aqi));
+    },
+  });
+}
+
+function airQualityGraphics(a: AirQualityRow): CesiumEntity.ConstructorOptions {
+  return {
+    point: {
+      pixelSize: 11,
+      color: aqiColor(a.aqi).withAlpha(0.9),
+      outlineColor: Color.BLACK.withAlpha(0.4),
+      outlineWidth: 1,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+    },
+    label: {
+      text: String(a.aqi),
+      font: "600 11px Inter, sans-serif",
+      fillColor: Color.WHITE,
+      showBackground: true,
+      backgroundColor: Color.fromCssColorString("#0c1016").withAlpha(0.7),
+      pixelOffset: new Cartesian2(0, -15),
+      scaleByDistance: new NearFarScalar(2.0e6, 1.0, 1.2e7, 0.0),
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
     },
   };
 }

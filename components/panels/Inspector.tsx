@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { loadSgp4, subpoint } from "@/lib/sgp4-client";
-import { useApp, type Airport, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type Airport, type AirQualityRow, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { operatorFromCallsign } from "@/data/airlines-icao";
 import StatusBadge from "@/components/common/StatusBadge";
 import { safeHttpUrl } from "@/lib/safe-url";
@@ -50,6 +50,9 @@ export default function Inspector() {
   } else if (sel.kind === "airport") {
     const ap = app.airports.rows.find((r) => r.id === sel.id);
     body = ap ? <AirportView a={ap} /> : <Missing kind="Airport" />;
+  } else if (sel.kind === "airquality") {
+    const aq = app.airquality.rows.find((r) => r.id === sel.id);
+    body = aq ? <AirQualityView a={aq} /> : <Missing kind="Air quality" />;
   } else if (sel.kind === "country") {
     body = <CountryView iso3={sel.iso3} name={sel.name} />;
   }
@@ -268,6 +271,34 @@ function VesselView({ v }: { v: VesselRow }) {
         <Field label="Last contact" value={since(v.lastContact)} />
       </div>
       <button className="link-btn" onClick={() => app.requestFlyTo(v.lat, v.lon)}>Focus on globe</button>
+    </>
+  );
+}
+
+function aqiBand(aqi: number): string {
+  if (aqi <= 50) return "Good";
+  if (aqi <= 100) return "Moderate";
+  if (aqi <= 150) return "Unhealthy (sensitive)";
+  if (aqi <= 200) return "Unhealthy";
+  if (aqi <= 300) return "Very unhealthy";
+  return "Hazardous";
+}
+
+function AirQualityView({ a }: { a: AirQualityRow }) {
+  const app = useApp();
+  return (
+    <>
+      <div className="entity-title">{a.place} · AQI {a.aqi}</div>
+      <div className="entity-sub">Air quality · {aqiBand(a.aqi)}</div>
+      <div className="field-grid">
+        <Field label="US AQI" value={String(a.aqi)} />
+        <Field label="PM2.5" value={a.pm25 != null ? `${Math.round(a.pm25)} µg/m³` : undefined} />
+        <Field label="Country" value={a.country} />
+        <Field label="Observed" value={a.observedAt ? since(a.observedAt) : undefined} />
+        <Field label="Position" value={coord(a.lat, a.lon)} />
+      </div>
+      <button className="link-btn" onClick={() => app.requestFlyTo(a.lat, a.lon)}>Focus on globe</button>
+      <p className="muted-note">Open-Meteo · CC BY 4.0</p>
     </>
   );
 }

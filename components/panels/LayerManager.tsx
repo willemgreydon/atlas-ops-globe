@@ -20,6 +20,7 @@ export default function LayerManager() {
       case "news": return app.news.meta?.status;
       case "vessels": return app.vessels.meta?.status;
       case "weather": return app.weather.meta?.status;
+      case "airquality": return app.airquality.meta?.status;
       case "satellites": return app.satellites.meta?.status;
       default: return undefined;
     }

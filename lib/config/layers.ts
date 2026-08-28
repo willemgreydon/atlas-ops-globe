@@ -16,6 +16,7 @@ export type LayerId =
   | "conflict"
   | "cyber"
   | "weather"
+  | "airquality"
   | "markets"
   | "space"
   | "sanctions";
@@ -26,7 +27,7 @@ export interface LayerDef {
   color: string;
   status: "active" | "planned";
   /** Which data feed drives this layer, for the fetch scheduler. */
-  feed?: "aircraft" | "events" | "news" | "countries" | "vessels" | "weather" | "satellites" | "airports";
+  feed?: "aircraft" | "events" | "news" | "countries" | "vessels" | "weather" | "satellites" | "airports" | "airquality";
   /** For event-driven layers, which event kinds/tags belong to this layer. */
   eventKinds?: EventKind[];
   providerNote?: string;
@@ -43,6 +44,7 @@ export const LAYERS: LayerDef[] = [
   { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "active", feed: "events", providerNote: "ACLED (needs myACLED login)" },
   { id: "cyber", label: "Cyber exposure", color: "#b18cff", status: "planned", providerNote: "CISA KEV / NVD (planned)" },
   { id: "weather", label: "Weather (cities)", color: "#9ad7ff", status: "active", feed: "weather", providerNote: "Open-Meteo current conditions" },
+  { id: "airquality", label: "Air quality", color: "#c8a2ff", status: "active", feed: "airquality", providerNote: "Open-Meteo US AQI" },
   { id: "markets", label: "Markets", color: "#ffd166", status: "planned", providerNote: "Market feed (planned)" },
   { id: "space", label: "Satellites", color: "#c0c8d4", status: "active", feed: "satellites", providerNote: "Space-Track / CelesTrak · SGP4" },
   { id: "sanctions", label: "Sanctions", color: "#ff9db1", status: "planned", providerNote: "OFAC/EU (planned)" },

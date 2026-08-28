@@ -41,6 +41,7 @@ export type LodLayerKind =
   | "conflict"
   | "news"
   | "weather"
+  | "airquality"
   | "countries";
 
 /** Ordered band ceilings (camera height in metres). First match wins, top→down. */
@@ -66,6 +67,7 @@ export const LOD_POLICY: Partial<Record<LodLayerKind, { minHeight?: number; maxH
   weather: { maxHeight: 8_000_000 }, // hide above the CONTINENT band
   news: { maxHeight: 8_000_000 },
   airports: { maxHeight: 8_000_000 }, // a 5k-dot field is noise from orbit
+  airquality: { maxHeight: 8_000_000 },
 };
 
 /** Classify a camera height (metres above the surface) into a zoom band. */

@@ -15,6 +15,7 @@ export type Selection =
   | { kind: "weather"; id: string }
   | { kind: "satellite"; id: string }
   | { kind: "airport"; id: string }
+  | { kind: "airquality"; id: string }
   | { kind: "country"; iso3: string; name?: string }
   | null;
 
@@ -28,6 +29,18 @@ export interface Airport {
   country?: string;
   large?: boolean;
   scheduled?: boolean;
+}
+
+/** Air-quality point (Open-Meteo, US AQI) sampled at a world city. */
+export interface AirQualityRow {
+  id: string;
+  place: string;
+  country: string;
+  lat: number;
+  lon: number;
+  aqi: number;
+  pm25: number | null;
+  observedAt: string;
 }
 
 /** Which HUD sheet is docked open on a phone (null = none, globe fully visible). */
@@ -152,6 +165,8 @@ interface AppState {
   conflict: Feed<WorldEvent>;
   /** Airports (static OurAirports set); lazily loaded when the layer is enabled. */
   airports: Feed<Airport>;
+  /** Air-quality points (Open-Meteo US AQI) at world cities. */
+  airquality: Feed<AirQualityRow>;
   /** Satellite catalogue (with TLEs) from the vault; propagated on the globe. */
   satellites: Feed<SatelliteRow>;
   /** Aggregated vault snapshot (SQLite-backed), or null while loading. */
@@ -408,6 +423,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Satellite catalogue with TLEs — propagated client-side via SGP4.
   const satellites = useFeed<SatelliteRow>("/api/intelligence/space?limit=900", POLL_MS.satellites, layers.space);
   const airports = useAirports(layers.airports);
+  const airquality = useFeed<AirQualityRow>("/api/intelligence/airquality", POLL_MS.satellites, layers.airquality);
   const vault = useVaultSnapshot();
 
   const value = useMemo<AppState>(
@@ -431,6 +447,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       conflict,
       satellites,
       airports,
+      airquality,
       vault,
       flyTo,
       requestFlyTo,
@@ -451,7 +468,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       terrain,
       setTerrain,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, airquality, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
