@@ -30,6 +30,25 @@ export async function fetchJson<T>(url: string, init: FetchOptions = {}): Promis
   }
 }
 
+/** Fetch a plain-text body (e.g. a CSV feed) with the same timeout/UA policy. */
+export async function fetchText(url: string, init: FetchOptions = {}): Promise<string> {
+  const { timeoutMs = 9000, headers, ...rest } = init;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...rest,
+      headers: { "user-agent": DEFAULT_UA, accept: "text/csv, text/plain, */*", ...headers },
+      signal: ctrl.signal,
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${hostOf(url)}`);
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Fetch JSON and validate it at the trust boundary with a Zod schema. External
  * data is never assumed to match our types — this is where we enforce it.
