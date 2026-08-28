@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listProvenance } from "@/lib/intel/queries";
+import { safeVault } from "@/lib/intel/safe-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,5 +15,5 @@ export function GET(req: NextRequest) {
   if (!subject) {
     return NextResponse.json({ error: "missing `subject` parameter" }, { status: 400 });
   }
-  return NextResponse.json({ subject, provenance: listProvenance(subject) });
+  return safeVault(() => ({ subject, provenance: listProvenance(subject) }), { subject, provenance: [] });
 }

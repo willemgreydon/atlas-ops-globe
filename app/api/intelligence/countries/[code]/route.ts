@@ -9,7 +9,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ code: stri
   if (!/^[A-Za-z]{2,3}$/.test(code)) {
     return NextResponse.json({ error: "invalid country code" }, { status: 400 });
   }
-  const profile = getCountryProfile(code);
-  if (!profile) return NextResponse.json({ error: "country not found" }, { status: 404 });
-  return NextResponse.json(profile);
+  try {
+    const profile = getCountryProfile(code);
+    if (!profile) return NextResponse.json({ error: "country not found" }, { status: 404 });
+    return NextResponse.json(profile);
+  } catch (e) {
+    // Vault read unavailable (e.g. Turso read quota) — degrade, don't 500.
+    return NextResponse.json({ error: "profile unavailable", degraded: true, detail: e instanceof Error ? e.message : String(e) }, { status: 200 });
+  }
 }
