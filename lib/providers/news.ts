@@ -21,6 +21,11 @@ import { mockNews } from "@/lib/mock";
  */
 const DEFAULT_QUERY = "conflict OR diplomacy OR sanctions OR disaster";
 
+/** Anchors a supplementary GDELT pass on the under-covered regions so their
+ *  stories surface and geolocate (country + hub cities in the gazetteer). */
+const REGION_QUERY =
+  "Russia OR China OR Nigeria OR Ethiopia OR Kenya OR Congo OR Sudan OR Egypt OR Beijing OR Shanghai OR Moscow OR Lagos OR Nairobi OR Johannesburg";
+
 /** Map a vault article onto the globe `NewsItem` shape, geolocating for plot. */
 function vaultToNews(a: VaultNews, provider: string): NewsItem {
   const explicit: GeoPoint | undefined =
@@ -88,6 +93,20 @@ export async function fetchLiveNews(query = DEFAULT_QUERY): Promise<NewsItem[]> 
     merge(await fetchGdeltNews(query));
   } catch {
     failures++;
+  }
+
+  // 4) Region-targeted GDELT — the default/EventRegistry mix skews Western, so
+  //    Russia/China/Africa stories get crowded out. In default-browse mode only
+  //    (never when the user is searching), pull an extra pass anchored on those
+  //    regions so they surface and geolocate via the city gazetteer. Best-effort:
+  //    a second GDELT call may rate-limit, which just adds nothing that round.
+  if (query === DEFAULT_QUERY) {
+    attempts++;
+    try {
+      merge(await fetchGdeltNews(REGION_QUERY));
+    } catch {
+      failures++;
+    }
   }
 
   // Every source we tried failed → surface an error so runProvider serves the

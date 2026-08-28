@@ -19,26 +19,35 @@ const KNOTS_TO_MS = 0.514444;
 const FEET_TO_M = 0.3048;
 const RADIUS_NM = 250;
 
-/** Tile centres over dense/high-interest regions. Each pulls a 250 nm disc. */
+/** Tile centres over dense/high-interest regions. Each pulls a 250 nm disc.
+ *  ADS-B is receiver-driven, so coverage over Russia/China/Africa is limited to
+ *  major hubs (and China filters ADS-B), but these tiles capture what exists. */
+// ~20 tiles — the ceiling adsb.lol tolerates in one burst before rate-limiting
+// (the throttle below also helps). Weighted toward the previously-sparse regions;
+// interior tiles with essentially no receivers (Siberia, Chinese interior) are
+// omitted — they'd just burn a request. The OpenSky vault baseline still fills
+// oceans/remote areas.
 export const ADSB_TILES: Array<[lat: number, lon: number]> = [
   [40, -80], // US NE
   [33, -97], // US S-central
   [37, -119], // US W
-  [49, -100], // Canada prairies
   [54, -2], // UK / N Sea
   [48, 6], // Europe W
-  [50, 16], // Europe central
   [41, 15], // Mediterranean
   [55, 37], // Moscow / W Russia
+  [60, 30], // St Petersburg
   [25, 51], // Gulf
+  [41, 29], // Istanbul
   [22, 78], // India
-  [31, 116], // E China
+  [40, 116], // Beijing
+  [31, 121], // Shanghai
+  [23, 113], // Guangzhou / Hong Kong
   [35, 139], // Japan / Korea
-  [13, 100], // SE Asia
-  [-33, 151], // SE Australia
-  [-26, 28], // S Africa
+  [13, 100], // SE Asia (Bangkok)
+  [30, 31], // Cairo
   [6, 3], // W Africa (Lagos)
-  [-23, -46], // Brazil SE
+  [-26, 28], // Johannesburg
+  [-33, 151], // SE Australia
 ];
 
 interface AdsbAircraft {
@@ -87,24 +96,39 @@ function toState(a: AdsbAircraft, nowMs: number): AircraftState | null {
  * by ICAO hex. Individual tile failures are tolerated — we return whatever the
  * reachable tiles gave us (empty array only if every tile failed).
  */
+const CONCURRENCY = 5; // adsb.lol is a community service — fetch tiles politely
+
 export async function fetchAdsbLolStates(tiles: Array<[number, number]> = ADSB_TILES): Promise<AircraftState[]> {
-  const results = await Promise.allSettled(
-    tiles.map(([lat, lon]) => fetchJson<AdsbResponse>(tileUrl(lat, lon), { timeoutMs: 10_000 })),
-  );
   const byId = new Map<string, AircraftState>();
   let anyOk = false;
-  for (const r of results) {
-    if (r.status !== "fulfilled") continue;
+
+  const ingest = (resp: AdsbResponse) => {
     anyOk = true;
-    const now = typeof r.value.now === "number" ? r.value.now : Date.now();
-    for (const a of r.value.ac ?? []) {
+    const now = typeof resp.now === "number" ? resp.now : Date.now();
+    for (const a of resp.ac ?? []) {
       const s = toState(a, now);
       if (!s) continue;
       // Prefer the freshest sighting when a plane appears in overlapping tiles.
       const prev = byId.get(s.id);
       if (!prev || s.lastContact > prev.lastContact) byId.set(s.id, s);
     }
-  }
+  };
+
+  // Bounded concurrency: firing all ~30 tiles at once trips adsb.lol's rate limit
+  // and collapses coverage, so run a small pool of workers over the tile queue.
+  let next = 0;
+  const worker = async () => {
+    while (next < tiles.length) {
+      const [lat, lon] = tiles[next++];
+      try {
+        ingest(await fetchJson<AdsbResponse>(tileUrl(lat, lon), { timeoutMs: 10_000 }));
+      } catch {
+        /* individual tile failure is tolerated */
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tiles.length) }, worker));
+
   if (!anyOk) throw new Error("all adsb.lol tiles failed");
   return [...byId.values()];
 }
