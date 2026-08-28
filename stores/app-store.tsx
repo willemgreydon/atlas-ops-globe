@@ -14,8 +14,21 @@ export type Selection =
   | { kind: "vessel"; id: string }
   | { kind: "weather"; id: string }
   | { kind: "satellite"; id: string }
+  | { kind: "airport"; id: string }
   | { kind: "country"; iso3: string; name?: string }
   | null;
+
+/** Airport point from the static OurAirports dataset (/data/airports.json). */
+export interface Airport {
+  id: string; // ICAO / ident
+  name: string;
+  lat: number;
+  lon: number;
+  iata?: string;
+  country?: string;
+  large?: boolean;
+  scheduled?: boolean;
+}
 
 /** Which HUD sheet is docked open on a phone (null = none, globe fully visible). */
 export type MobileDock = "layers" | "intel" | null;
@@ -137,6 +150,8 @@ interface AppState {
   markets: Feed<MarketRow>;
   /** Conflict/unrest events from the vault (ACLED). */
   conflict: Feed<WorldEvent>;
+  /** Airports (static OurAirports set); lazily loaded when the layer is enabled. */
+  airports: Feed<Airport>;
   /** Satellite catalogue (with TLEs) from the vault; propagated on the globe. */
   satellites: Feed<SatelliteRow>;
   /** Aggregated vault snapshot (SQLite-backed), or null while loading. */
@@ -310,6 +325,28 @@ function useFeed<T>(url: string, intervalMs: number, active: boolean, map?: (raw
   return state;
 }
 
+/** Airports are a static public-domain dataset — fetch the JSON once, lazily,
+ *  the first time the layer is enabled (595 KB, immutable-cached). */
+function useAirports(active: boolean): Feed<Airport> {
+  const [state, setState] = useState<Feed<Airport>>({ rows: [], meta: null, loading: false });
+  const loaded = useRef(false);
+  useEffect(() => {
+    if (!active || loaded.current) return;
+    loaded.current = true;
+    setState((s) => ({ ...s, loading: true }));
+    fetch("/data/airports.json")
+      .then((r) => r.json())
+      .then((rows: Airport[]) => {
+        const meta: FeedMeta = { status: "live", source: "OurAirports", cached: true, stale: false, fetchedAt: new Date().toISOString(), count: rows.length };
+        setState({ rows, meta, loading: false });
+      })
+      .catch((err) => {
+        setState({ rows: [], loading: false, meta: { status: "offline", source: "OurAirports", cached: false, stale: true, fetchedAt: new Date().toISOString(), error: String(err), count: 0 } });
+      });
+  }, [active]);
+  return state;
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<ModeId>("global");
   const [layers, setLayers] = useState<Record<LayerId, boolean>>(() => defaultLayerVisibility("global"));
@@ -370,6 +407,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const conflict = useFeed<WorldEvent>("/api/intelligence/events?kind=conflict&limit=500", POLL_MS.conflict, layers.conflict, vaultEventToWorld);
   // Satellite catalogue with TLEs — propagated client-side via SGP4.
   const satellites = useFeed<SatelliteRow>("/api/intelligence/space?limit=900", POLL_MS.satellites, layers.space);
+  const airports = useAirports(layers.airports);
   const vault = useVaultSnapshot();
 
   const value = useMemo<AppState>(
@@ -392,6 +430,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       markets,
       conflict,
       satellites,
+      airports,
       vault,
       flyTo,
       requestFlyTo,
@@ -412,7 +451,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       terrain,
       setTerrain,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

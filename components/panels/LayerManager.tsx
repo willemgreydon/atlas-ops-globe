@@ -15,6 +15,7 @@ export default function LayerManager() {
     // shows an honest liveness dot (was silently blank for maritime/weather/space).
     switch (feed) {
       case "aircraft": return app.aircraft.meta?.status;
+      case "airports": return app.airports.meta?.status;
       case "events": return app.events.meta?.status;
       case "news": return app.news.meta?.status;
       case "vessels": return app.vessels.meta?.status;

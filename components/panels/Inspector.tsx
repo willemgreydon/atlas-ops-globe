@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { loadSgp4, subpoint } from "@/lib/sgp4-client";
-import { useApp, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type Airport, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { operatorFromCallsign } from "@/data/airlines-icao";
 import StatusBadge from "@/components/common/StatusBadge";
 import { safeHttpUrl } from "@/lib/safe-url";
@@ -47,6 +47,9 @@ export default function Inspector() {
   } else if (sel.kind === "satellite") {
     const s = app.satellites.rows.find((r) => r.id === sel.id);
     body = s ? <SatelliteView s={s} /> : <Missing kind="Satellite" />;
+  } else if (sel.kind === "airport") {
+    const ap = app.airports.rows.find((r) => r.id === sel.id);
+    body = ap ? <AirportView a={ap} /> : <Missing kind="Airport" />;
   } else if (sel.kind === "country") {
     body = <CountryView iso3={sel.iso3} name={sel.name} />;
   }
@@ -265,6 +268,25 @@ function VesselView({ v }: { v: VesselRow }) {
         <Field label="Last contact" value={since(v.lastContact)} />
       </div>
       <button className="link-btn" onClick={() => app.requestFlyTo(v.lat, v.lon)}>Focus on globe</button>
+    </>
+  );
+}
+
+function AirportView({ a }: { a: Airport }) {
+  const app = useApp();
+  return (
+    <>
+      <div className="entity-title">{a.name}</div>
+      <div className="entity-sub">Airport{a.large ? " · major hub" : ""}</div>
+      <div className="field-grid">
+        <Field label="ICAO" value={a.id} />
+        <Field label="IATA" value={a.iata} />
+        <Field label="Country" value={a.country} />
+        <Field label="Scheduled" value={a.scheduled ? "yes" : "no"} />
+        <Field label="Position" value={coord(a.lat, a.lon)} />
+      </div>
+      <button className="link-btn" onClick={() => app.requestFlyTo(a.lat, a.lon)}>Focus on globe</button>
+      <p className="muted-note">OurAirports · public domain</p>
     </>
   );
 }

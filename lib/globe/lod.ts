@@ -34,6 +34,7 @@ export type LodBand = "orbit" | "continent" | "country" | "regional" | "city";
 /** Every domain layer the engine can gate. */
 export type LodLayerKind =
   | "aircraft"
+  | "airports"
   | "vessels"
   | "satellites"
   | "events"
@@ -64,6 +65,7 @@ export const LOD_BANDS: { band: LodBand; below: number }[] = [
 export const LOD_POLICY: Partial<Record<LodLayerKind, { minHeight?: number; maxHeight?: number }>> = {
   weather: { maxHeight: 8_000_000 }, // hide above the CONTINENT band
   news: { maxHeight: 8_000_000 },
+  airports: { maxHeight: 8_000_000 }, // a 5k-dot field is noise from orbit
 };
 
 /** Classify a camera height (metres above the surface) into a zoom band. */

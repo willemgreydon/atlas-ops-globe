@@ -31,3 +31,5 @@ coverage
 
 # TS incremental build info
 tsconfig.tsbuildinfo
+.vercel
+.env*

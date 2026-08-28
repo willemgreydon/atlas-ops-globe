@@ -22,7 +22,7 @@ import {
 import { ImageryLayer, Viewer, type CesiumComponentRef } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { loadSgp4 } from "@/lib/sgp4-client";
-import { useApp, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type Airport, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import type { AircraftState, NewsItem, Severity, WorldEvent } from "@/types/domain";
 import { configureScene } from "@/lib/globe/scene";
@@ -466,6 +466,24 @@ export default function Globe() {
     return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); weatherLayer.current = null; };
   }, [ready, app.layers.weather]);
 
+  // --- airports layer (static OurAirports points; lazy-loaded) --------------
+  const airportsLayer = useRef<StaticLayer<Airport> | null>(null);
+  const airportRows = useRef<Airport[]>([]);
+  useEffect(() => {
+    airportRows.current = app.airports.rows;
+    airportsLayer.current?.update(app.airports.rows);
+  }, [app.airports.rows]);
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!ready || !viewer || !app.layers.airports) return;
+    const layer = createAirportsLayer(viewer);
+    layer.mount();
+    layer.update(airportRows.current);
+    airportsLayer.current = layer;
+    lodRef.current?.register("airports", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); airportsLayer.current = null; };
+  }, [ready, app.layers.airports]);
+
   // --- satellites layer (SGP4 via render manager, continuous smooth motion) --
   // satellite.js is code-split; load it once the space layer is first enabled.
   const [sgp4, setSgp4] = useState<Sgp4 | null>(null);
@@ -502,6 +520,7 @@ export default function Globe() {
   const feedsRef = useRef({
     aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
     conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
+    airports: app.airports.rows,
   });
   useEffect(() => {
     // Deliberate latest-value ref: the focus/hover effects read these rows to
@@ -513,8 +532,9 @@ export default function Globe() {
     feedsRef.current = {
       aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
       conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
+      airports: app.airports.rows,
     };
-  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows]);
+  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows, app.airports.rows]);
 
   // --- focus mode: follow (moving) or fly-to (static) the selection ---------
   // Moving objects (aircraft/vessel/satellite) are *tracked* (§19): the camera
@@ -609,6 +629,13 @@ export default function Globe() {
         orbitTrail.current?.hide();
         break;
       }
+      case "airport": {
+        untrack();
+        const ap = feeds.airports.find((r) => r.id === sel.id);
+        if (ap) { cam.flyToPoint(ap.lon, ap.lat, 200_000); focus?.showAt(Cartesian3.fromDegrees(ap.lon, ap.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
       default:
         untrack();
         orbitTrail.current?.hide();
@@ -694,6 +721,7 @@ interface HoverFeeds {
   news: NewsItem[];
   weather: WeatherRow[];
   satellites: SatelliteRow[];
+  airports: Airport[];
 }
 
 /** Resolve a picked scene object into a hover tooltip payload (or null). */
@@ -741,6 +769,10 @@ function hoverForSelection(sel: NonNullable<Selection>, feeds: HoverFeeds, x: nu
     case "weather": {
       const w = feeds.weather.find((r) => r.id === sel.id);
       return w ? { x, y, kind: "WEATHER", title: w.place || "Observation", subtitle: w.value != null ? `${Math.round(w.value)}°${w.unit ?? "C"}` : undefined, color: LAYER_BY_ID.weather.color } : null;
+    }
+    case "airport": {
+      const ap = feeds.airports.find((r) => r.id === sel.id);
+      return ap ? { x, y, kind: "AIRPORT", title: ap.name, subtitle: join([ap.iata, ap.country]), color: LAYER_BY_ID.airports.color } : null;
     }
     default:
       return null;
@@ -856,6 +888,32 @@ function createNewsLayer(viewer: CesiumViewer): StaticLayer<NewsItem> {
 function tempColor(c: number): Color {
   const t = Math.max(0, Math.min(1, (c + 10) / 50));
   return Color.fromHsl((1 - t) * 0.66, 0.85, 0.55);
+}
+
+function createAirportsLayer(viewer: CesiumViewer): StaticLayer<Airport> {
+  return new StaticLayer<Airport>(viewer, selectionMap, {
+    name: "airports",
+    position: (a) => Cartesian3.fromDegrees(a.lon, a.lat, 0),
+    build: (a) => airportGraphics(a),
+    selection: (a) => ({ kind: "airport", id: a.id }),
+  });
+}
+
+function airportGraphics(a: Airport): CesiumEntity.ConstructorOptions {
+  const color = Color.fromCssColorString(LAYER_BY_ID.airports.color);
+  return {
+    point: {
+      pixelSize: a.large ? 6 : 4,
+      color: color.withAlpha(a.large ? 0.95 : 0.7),
+      outlineColor: Color.BLACK.withAlpha(0.35),
+      outlineWidth: 1,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+      // Fade the smaller airports out when zoomed far so the globe isn't a wall
+      // of dots; larger hubs stay visible longer.
+      scaleByDistance: new NearFarScalar(3.0e6, 1.0, 2.0e7, a.large ? 0.5 : 0.25),
+    },
+  };
 }
 
 function weatherGraphics(w: WeatherRow): CesiumEntity.ConstructorOptions {
