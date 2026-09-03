@@ -29,7 +29,7 @@ const Schema = z.object({
 const DEFAULT_QUERY = "conflict OR diplomacy OR sanctions OR disaster";
 
 /** GDELT seendate is `YYYYMMDDTHHMMSSZ`; normalize to ISO-8601. */
-function parseSeenDate(s: string): string {
+export function parseSeenDate(s: string): string {
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(s);
   if (!m) return new Date().toISOString();
   const [, y, mo, d, h, mi, se] = m;
@@ -82,7 +82,12 @@ export function normalizeGdelt(raw: unknown): NewsItem[] {
   });
 }
 
-async function fetchGdeltText(url: string): Promise<unknown> {
+/**
+ * Fetch a GDELT API URL, tolerating its quirk of returning HTTP 200 with a
+ * plain-text body when it rate-limits or rejects a query. Shared by the news and
+ * conflict providers.
+ */
+export async function fetchGdeltText(url: string): Promise<unknown> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 20_000);
   try {

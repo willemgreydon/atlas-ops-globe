@@ -4,7 +4,8 @@ import { attachFreshness } from "@/lib/intel/freshness";
 import { safeVault, emptyPage } from "@/lib/intel/safe-route";
 import { runProvider } from "@/lib/core/provider";
 import { ucdpProvider, ucdpConfigured } from "@/lib/providers/ucdp";
-import type { WorldEvent } from "@/types/domain";
+import { gdeltConflictProvider } from "@/lib/providers/gdelt-conflict";
+import type { ProviderResult, WorldEvent } from "@/types/domain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,21 +29,34 @@ function flatten(e: WorldEvent): Record<string, unknown> {
   };
 }
 
+/** Live rows from a provider result, or [] when unconfigured/errored/mock. */
+const liveRows = (r: ProviderResult<WorldEvent[]> | null): Record<string, unknown>[] =>
+  r && r.status !== "mock" && !r.error ? r.data.map(flatten) : [];
+
 /**
- * Conflict & unrest feed. UCDP live events (dense over Central Africa/Sahel —
- * needs UCDP_ACCESS_TOKEN) are merged OVER the ACLED vault baseline. UCDP is
- * fetched through the provider framework, so a hiccup or a missing token can
- * never 500 or fake liveness — it just contributes nothing and the layer runs
- * on the vault. The vault read is wrapped in safeVault so the Turso quota can't
- * 500 the route either.
+ * Conflict & unrest feed, merged from three sources, best → baseline:
+ *  1. UCDP  — curated, fatality-verified events (needs UCDP_ACCESS_TOKEN).
+ *  2. GDELT — keyless, media-derived conflict reporting (dense over Central
+ *     Africa/Sahel), the always-on baseline so the layer works with no token.
+ *  3. ACLED vault — the persisted baseline.
+ *
+ * Every upstream is fetched through the provider framework, so a hiccup or a
+ * missing token can never 500 or fake liveness — it just contributes nothing.
+ * The vault read is wrapped in safeVault so the Turso quota can't 500 the route.
  */
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
-  // UCDP first (never throws; empty when unconfigured/errored).
-  const ucdp = ucdpConfigured() ? await runProvider(ucdpProvider) : null;
-  const ucdpRows = ucdp && ucdp.status !== "mock" && !ucdp.error ? ucdp.data.map(flatten) : [];
-  const live = ucdpRows.length > 0;
+  // Live sources first — both keyless-safe, neither throws.
+  const [ucdp, gdelt] = await Promise.all([
+    ucdpConfigured() ? runProvider(ucdpProvider) : Promise.resolve(null),
+    runProvider(gdeltConflictProvider),
+  ]);
+  const ucdpRows = liveRows(ucdp);
+  const gdeltRows = liveRows(gdelt);
+  const liveRowsAll = [...ucdpRows, ...gdeltRows];
+  const live = liveRowsAll.length > 0;
+  const liveSource = [ucdpRows.length ? "ucdp" : "", gdeltRows.length ? "gdelt" : ""].filter(Boolean).join("+");
 
   return safeVault(
     () => {
@@ -51,25 +65,25 @@ export async function GET(req: NextRequest) {
         "conflict",
         "occurredAt",
       );
-      const rows = [...ucdpRows, ...(page.data as Record<string, unknown>[])];
+      const rows = [...liveRowsAll, ...(page.data as Record<string, unknown>[])];
       return {
         ...page,
         rows,
         data: rows,
         count: rows.length,
-        // Live UCDP wins the status; otherwise let the store derive honest
+        // Live upstream wins the status; otherwise let the store derive honest
         // freshness from the vault envelope (never mislabel a stale feed LIVE).
-        ...(live ? { status: "live", source: "ucdp+vault" } : { source: "acled-vault" }),
+        ...(live ? { status: "live", source: `${liveSource}+vault` } : { source: "acled-vault" }),
       };
     },
-    // Vault unavailable (quota/cold replica): still serve whatever UCDP gave us.
+    // Vault unavailable (quota/cold replica): still serve the live rows.
     {
       ...emptyPage({}, "conflict"),
-      rows: ucdpRows,
-      data: ucdpRows,
-      count: ucdpRows.length,
+      rows: liveRowsAll,
+      data: liveRowsAll,
+      count: liveRowsAll.length,
       status: live ? "live" : "offline",
-      source: live ? "ucdp" : "acled-vault",
+      source: live ? liveSource : "acled-vault",
     },
   );
 }

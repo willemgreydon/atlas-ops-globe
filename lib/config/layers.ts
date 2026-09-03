@@ -49,7 +49,7 @@ export const LAYERS: LayerDef[] = [
   { id: "naturalEvents", label: "Natural events", color: "#ff8a5b", status: "active", feed: "events", eventKinds: ["disaster"], providerNote: "NASA EONET" },
   { id: "news", label: "News & entities", color: "#54c7ff", status: "active", feed: "news", providerNote: "GDELT" },
   { id: "maritime", label: "Maritime / AIS", color: "#4fd6d1", status: "active", feed: "vessels", providerNote: "AISStream.io — live global AIS" },
-  { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "active", feed: "conflict", providerNote: "UCDP live (needs UCDP_ACCESS_TOKEN) + ACLED vault" },
+  { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "active", feed: "conflict", providerNote: "GDELT (keyless) + UCDP (needs token) + ACLED vault" },
   { id: "cyber", label: "Cyber exposure", color: "#b18cff", status: "planned", providerNote: "CISA KEV / NVD (planned)" },
   { id: "weather", label: "Weather (cities)", color: "#9ad7ff", status: "active", feed: "weather", providerNote: "Open-Meteo current conditions" },
   { id: "airquality", label: "Air quality", color: "#c8a2ff", status: "active", feed: "airquality", providerNote: "Open-Meteo US AQI" },
