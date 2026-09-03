@@ -1,5 +1,5 @@
 import { fetchAcledEvents, acledConfigured } from "../providers/acled";
-import { fetchGdeltConflict } from "@/lib/providers/gdelt-conflict";
+import { fetchGdeltConflict, CONFLICT_QUERIES } from "@/lib/providers/gdelt-conflict";
 import { prov } from "@/lib/intel/provenance";
 import { isValidPoint } from "@/lib/core/geo";
 import { runIngestor, type IngestCounts, type IngestReport } from "../ingest";
@@ -25,27 +25,33 @@ import type { VaultEvent } from "../schemas";
  */
 export async function ingestConflict(opts: { days?: number; limit?: number } = {}): Promise<IngestReport> {
   return runIngestor({ domain: "conflict", source: "gdelt+acled", job: "conflict-events" }, async (c) => {
-    const [gdelt, acled] = await Promise.allSettled([
-      fetchGdeltConflict(),
-      acledConfigured()
-        ? fetchAcledEvents({ days: opts.days ?? 14, limit: opts.limit ?? 800 })
-        : Promise.resolve([]),
-    ]);
-
-    // GDELT returns WorldEvent[] (nested location) → map to canonical VaultEvent.
-    if (gdelt.status === "fulfilled") storeWorldEvents(gdelt.value, "gdelt-conflict", c);
-    else c.failed++;
-
-    // ACLED already returns VaultEvent[] in canonical shape.
-    if (acled.status === "fulfilled") {
-      for (const e of acled.value) {
-        c.fetched++;
-        upsertEvent(e);
-        if (e.countryCode) linkEventCountry(e.id, e.countryCode, "reported");
-        c.created++;
+    // Several complementary GDELT passes (dense, deduped by id) for broad global
+    // coverage, plus ACLED when credentialed. Passes run sequentially so we don't
+    // hammer GDELT's rate limiter with parallel bursts.
+    const gdeltSeen = new Set<string>();
+    for (const q of CONFLICT_QUERIES) {
+      try {
+        const events = await fetchGdeltConflict(q, 250);
+        storeWorldEvents(events.filter((e) => !gdeltSeen.has(e.id)), "gdelt-conflict", c);
+        for (const e of events) gdeltSeen.add(e.id);
+      } catch {
+        c.failed++; // a single pass failing shouldn't sink the others
       }
-    } else if (acledConfigured()) {
-      c.failed++;
+    }
+
+    // ACLED (curated, fatality-verified) merges on top when credentialed. Already
+    // returns VaultEvent[] in canonical shape.
+    if (acledConfigured()) {
+      try {
+        for (const e of await fetchAcledEvents({ days: opts.days ?? 14, limit: opts.limit ?? 800 })) {
+          c.fetched++;
+          upsertEvent(e);
+          if (e.countryCode) linkEventCountry(e.id, e.countryCode, "reported");
+          c.created++;
+        }
+      } catch {
+        c.failed++;
+      }
     }
   });
 }

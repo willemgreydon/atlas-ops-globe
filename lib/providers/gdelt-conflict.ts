@@ -44,6 +44,15 @@ const Schema = z.object({
 // OR terms are parenthesised at the fetch layer via gdeltParenQuery — GDELT now
 // requires that wrapping or it rejects the request.
 const DEFAULT_QUERY = "airstrike OR clashes OR militants OR insurgents OR shelling OR fighting";
+/** Complementary conflict passes → denser global coverage (incl. the Sahel /
+ *  Central-Africa belt UCDP/ACLED cover but the single query can miss). Each is
+ *  simple single-word ORs (GDELT rejects complex queries); parenthesised at the
+ *  fetch layer. Deduped by event id downstream. */
+export const CONFLICT_QUERIES = [
+  "airstrike OR clashes OR militants OR insurgents OR shelling OR fighting",
+  "war OR gunmen OR rebels OR troops OR offensive OR siege",
+  "attack OR ambush OR bombing OR raid OR gunfire OR casualties",
+];
 const RELIABILITY = 0.55; // media-derived — deliberately lower than UCDP/ACLED
 
 // Intensity words in the headline → severity band (best-effort, no fatality data).
@@ -101,11 +110,11 @@ export function normalizeGdeltConflict(raw: unknown): WorldEvent[] {
   return out;
 }
 
-export async function fetchGdeltConflict(query = DEFAULT_QUERY): Promise<WorldEvent[]> {
+export async function fetchGdeltConflict(query = DEFAULT_QUERY, maxrecords = 75): Promise<WorldEvent[]> {
   const qs = new URLSearchParams({
     query: gdeltParenQuery(query),
     mode: "ArtList",
-    maxrecords: "75",
+    maxrecords: String(Math.min(250, Math.max(1, maxrecords))), // GDELT caps ArtList at 250
     format: "json",
     sort: "DateDesc",
   });
