@@ -38,18 +38,22 @@ const KN_TO_MS = 0.514444;
  * These are tuned per layer by how *clustered* the objects are, not just by
  * zoom. Satellites are sparse across the whole sky, so a generous bubble shows
  * them as models from orbit and still reads cleanly. Aircraft (and vessels) pack
- * thousands into a small area over Europe/the coasts — showing all of them as
- * models at a continental zoom overlaps into a solid blob — so their bubble is
- * smaller: they stay as clustered points when zoomed out and only resolve into
- * models once you zoom into a region where they're spread apart.
+ * thousands into a small area over Europe/the coasts — so their bubble is kept
+ * tight (~regional-zoom range, matching the `regional` LOD band at 400 km): they
+ * stay as clustered flat markers until you dive into a region where they're
+ * spread apart, and only then resolve into 3D models. A larger bubble (the old
+ * 1.4e6 m) put the whole dense hemisphere inside model range at once, overlapping
+ * into a solid white blob.
  */
 const SAT_MODEL_DISTANCE = 1.5e7;
-const AIRCRAFT_MODEL_DISTANCE = 1.4e6;
-const VESSEL_MODEL_DISTANCE = 1.2e6;
+const AIRCRAFT_MODEL_DISTANCE = 4.0e5;
+const VESSEL_MODEL_DISTANCE = 3.5e5;
 
-/** Uniform on-screen model size (px). Every model reads at the same scale as the
- *  satellites, regardless of the object's true metres. */
+/** On-screen model floor (px). Satellites are sparse so they carry the larger
+ *  landmark size; dense traffic (aircraft/vessels) uses a smaller floor so a
+ *  cluster of resolved models stays legible instead of merging. */
 const MODEL_MIN_PX = 40;
+const TRAFFIC_MODEL_MIN_PX = 26;
 
 /** glTF model graphics shown only within `near` metres of the camera. */
 function nearModel(uri: string, near: number, minimumPixelSize: number) {
@@ -105,7 +109,7 @@ export function createAircraftLayer(viewer: Viewer, sel: SelMap, sprite: HTMLCan
         distanceDisplayCondition: new DistanceDisplayCondition(AIRCRAFT_MODEL_DISTANCE, Number.MAX_VALUE),
       },
       // Archetype chosen per aircraft from its ADS-B kinematics (jet / prop / heli).
-      model: nearModel(modelUrl(classifyAircraft(a)), AIRCRAFT_MODEL_DISTANCE, MODEL_MIN_PX),
+      model: nearModel(modelUrl(classifyAircraft(a)), AIRCRAFT_MODEL_DISTANCE, TRAFFIC_MODEL_MIN_PX),
     }),
     orient: orientToSurface,
     orientMaxDistanceM: AIRCRAFT_MODEL_DISTANCE,
@@ -141,7 +145,7 @@ export function createVesselLayer(viewer: Viewer, sel: SelMap): MovingLayer<Vess
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
         distanceDisplayCondition: new DistanceDisplayCondition(VESSEL_MODEL_DISTANCE, Number.MAX_VALUE),
       },
-      model: nearModel(modelUrl("vessel-cargo"), VESSEL_MODEL_DISTANCE, MODEL_MIN_PX),
+      model: nearModel(modelUrl("vessel-cargo"), VESSEL_MODEL_DISTANCE, TRAFFIC_MODEL_MIN_PX),
     }),
     orient: orientToSurface,
     orientMaxDistanceM: VESSEL_MODEL_DISTANCE,
