@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Cartesian3, Cartesian3 as C3, Ellipsoid, Matrix3, Quaternion } from "cesium";
 import { box, cylinder, buildGlb } from "@/lib/globe/models/gltf";
 import { buildModel, MODEL_KEYS } from "@/lib/globe/models/catalog";
-import { classifySatellite } from "@/lib/globe/models/classify";
+import { classifySatellite, classifyAircraft } from "@/lib/globe/models/classify";
+import type { AircraftState } from "@/types/domain";
 import { surfaceQuaternion } from "@/lib/globe/render/orient";
 import type { SatelliteRow } from "@/stores/app-store";
 
@@ -111,6 +112,23 @@ describe("satellite classifier", () => {
     expect(classifySatellite(row({ name: "OBJECT B", periodMin: 718 }))).toBe("sat-nav");
     expect(classifySatellite(row({ name: "OBJECT C", periodMin: 1436 }))).toBe("sat-comms");
     expect(classifySatellite(row({ name: "MYSTERY" }))).toBe("sat-generic");
+  });
+});
+
+describe("aircraft classifier", () => {
+  const ac = (over: Partial<AircraftState>): AircraftState => ({
+    id: "1", position: { lat: 0, lon: 0, alt: 10_000 }, lastContact: "2026-09-03T00:00:00Z", ...over,
+  });
+
+  it("routes by speed + altitude", () => {
+    expect(classifyAircraft(ac({ velocityMs: 240, position: { lat: 0, lon: 0, alt: 11_000 } }))).toBe("aircraft-airliner");
+    expect(classifyAircraft(ac({ velocityMs: 70, position: { lat: 0, lon: 0, alt: 1_200 } }))).toBe("aircraft-light");
+    expect(classifyAircraft(ac({ velocityMs: 20, position: { lat: 0, lon: 0, alt: 300 } }))).toBe("aircraft-heli");
+  });
+
+  it("keeps ground contacts and unknown-speed as airliners", () => {
+    expect(classifyAircraft(ac({ velocityMs: 5, onGround: true, position: { lat: 0, lon: 0, alt: 0 } }))).toBe("aircraft-airliner");
+    expect(classifyAircraft(ac({ velocityMs: undefined }))).toBe("aircraft-airliner");
   });
 });
 

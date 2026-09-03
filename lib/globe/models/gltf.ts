@@ -121,6 +121,45 @@ export function cylinder(
   return { positions, normals, indices };
 }
 
+/**
+ * Extrude a flat 2D planform (points in the XY plane) by `thickness` along Z,
+ * giving a thin slab with correct per-face normals. Points should be a convex
+ * polygon in order (a fan triangulation is used). This is what makes real wings,
+ * tailplanes and fins possible — swept, tapered surfaces a box can't express.
+ */
+export function extrude(profile: Array<[number, number]>, thickness: number): Geometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+  const hz = thickness / 2;
+  const n = profile.length;
+
+  // Top cap (+Z) — fan from vertex 0.
+  let base = positions.length / 3;
+  for (const [x, y] of profile) { positions.push(x, y, hz); normals.push(0, 0, 1); }
+  for (let i = 1; i < n - 1; i++) indices.push(base, base + i, base + i + 1);
+
+  // Bottom cap (−Z) — reversed winding.
+  base = positions.length / 3;
+  for (const [x, y] of profile) { positions.push(x, y, -hz); normals.push(0, 0, -1); }
+  for (let i = 1; i < n - 1; i++) indices.push(base, base + i + 1, base + i);
+
+  // Side walls — one quad per edge, outward normal (perpendicular to the edge).
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = profile[i];
+    const [bx, by] = profile[(i + 1) % n];
+    let nx = by - ay;
+    let ny = -(bx - ax);
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len; ny /= len;
+    base = positions.length / 3;
+    positions.push(ax, ay, -hz, bx, by, -hz, bx, by, hz, ax, ay, hz);
+    for (let k = 0; k < 4; k++) normals.push(nx, ny, 0);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  return { positions, normals, indices };
+}
+
 // --- materials & parts ------------------------------------------------------
 
 export interface Material {

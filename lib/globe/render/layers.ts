@@ -25,7 +25,7 @@ import { LAYER_BY_ID } from "@/lib/config/layers";
 import { MovingLayer, deadReckon, secondsSince } from "./motion";
 import { surfaceQuaternion } from "./orient";
 import { modelUrl } from "@/lib/globe/models/registry";
-import { classifySatellite } from "@/lib/globe/models/classify";
+import { classifySatellite, classifyAircraft } from "@/lib/globe/models/classify";
 
 type SelMap = WeakMap<Entity, NonNullable<Selection>>;
 const KN_TO_MS = 0.514444;
@@ -94,7 +94,7 @@ export function createAircraftLayer(viewer: Viewer, sel: SelMap, sprite: HTMLCan
       const p = deadReckon(a.position.lon, a.position.lat, a.headingDeg, a.velocityMs, elapsed, 30);
       return { lon: p.lon, lat: p.lat, alt: a.position.alt ?? 9000, headingDeg: a.headingDeg };
     },
-    build: () => ({
+    build: (a) => ({
       billboard: {
         image: sprite,
         scale: 0.9,
@@ -104,7 +104,8 @@ export function createAircraftLayer(viewer: Viewer, sel: SelMap, sprite: HTMLCan
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
         distanceDisplayCondition: new DistanceDisplayCondition(AIRCRAFT_MODEL_DISTANCE, Number.MAX_VALUE),
       },
-      model: nearModel(modelUrl("aircraft-airliner"), AIRCRAFT_MODEL_DISTANCE, MODEL_MIN_PX),
+      // Archetype chosen per aircraft from its ADS-B kinematics (jet / prop / heli).
+      model: nearModel(modelUrl(classifyAircraft(a)), AIRCRAFT_MODEL_DISTANCE, MODEL_MIN_PX),
     }),
     orient: orientToSurface,
     orientMaxDistanceM: AIRCRAFT_MODEL_DISTANCE,

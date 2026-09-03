@@ -7,6 +7,7 @@
  * communications platform; a bare LEO object, a smallsat.
  */
 import type { SatelliteRow } from "@/stores/app-store";
+import type { AircraftState } from "@/types/domain";
 import type { ModelKey } from "./catalog";
 
 const has = (s: string, ...needles: string[]) => needles.some((n) => s.includes(n));
@@ -44,4 +45,20 @@ export function classifySatellite(row: SatelliteRow): ModelKey {
     if (period < 128) return "sat-leo"; // LEO
   }
   return "sat-generic";
+}
+
+/**
+ * Pick an aircraft archetype from ADS-B kinematics (no type field is broadcast).
+ * Speed + altitude separate the fleet well enough: a fast, high mover is a jet
+ * airliner; slow and low is a light prop; very slow and low (able to hover) is a
+ * rotorcraft. On-ground contacts stay airliners — the ground is mostly airports.
+ */
+export function classifyAircraft(a: AircraftState): ModelKey {
+  const v = a.velocityMs ?? null; // m/s ground speed
+  const alt = a.position?.alt ?? null; // metres
+  if (!a.onGround && v != null) {
+    if (v < 35 && (alt == null || alt < 1800)) return "aircraft-heli";
+    if (v < 120 && (alt == null || alt < 6000)) return "aircraft-light";
+  }
+  return "aircraft-airliner";
 }
