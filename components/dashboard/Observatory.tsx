@@ -1,43 +1,48 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useApp, type DashInsight, type DashPayload, type DashScore } from "@/stores/app-store";
+import {
+  QuadrantScatter, WeightBuilder, CorrelationHeatmap, DistributionPanel, OutlierBoard,
+  RiskAdjusted, ExpectedImpact, CompoundRisk, RegionalRollup, CompareCountries,
+  SimilarCountries, EntityNetwork, ConcentrationPanel, DataTable, MethodPanel,
+} from "./features";
 
 type Persona = "all" | "political" | "finance" | "marketing";
+type Tab = "overview" | "explore" | "compare" | "network" | "method";
+
 const PERSONAS: { id: Persona; label: string; blurb: string }[] = [
   { id: "all", label: "All", blurb: "Every lens, ranked by signal strength" },
   { id: "political", label: "Political", blurb: "Hotspots, escalation, sanctions, influence" },
   { id: "finance", label: "Finance", blurb: "Market movers, exposure, cyber, supply-chain risk" },
   { id: "marketing", label: "Marketing", blurb: "Reach, opportunity markets, trending topics" },
 ];
-
-/** Default leaderboard metric per persona. */
+const TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" }, { id: "explore", label: "Explore" },
+  { id: "compare", label: "Compare" }, { id: "network", label: "Network" }, { id: "method", label: "Method" },
+];
 const LEAD_METRIC: Record<Persona, keyof Pick<DashScore, "risk" | "opportunity" | "momentum">> = {
   all: "risk", political: "risk", finance: "risk", marketing: "opportunity",
 };
-
 const fmt = (n: number) => n.toLocaleString("en-US");
-const fmtM = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)}k` : `${n}`);
 
 export default function Observatory() {
   const app = useApp();
   const { data, loading, error } = app.dashboard;
   const [persona, setPersona] = useState<Persona>("all");
+  const [tab, setTab] = useState<Tab>("overview");
 
   if (error || (data && data.degraded)) {
     return (
       <div className="observatory">
-        <ObsHeader persona={persona} setPersona={setPersona} generatedAt={data?.generatedAt} status="degraded" />
-        <div className="obs-empty">
-          Analytics unavailable — the intelligence vault is temporarily unreadable (read-quota / cold replica).
-          Live layers on the globe are unaffected.
-        </div>
+        <ObsHeader persona={persona} setPersona={setPersona} tab={tab} setTab={setTab} generatedAt={data?.generatedAt} status="degraded" />
+        <div className="obs-empty">Analytics unavailable — the intelligence vault is temporarily unreadable (read-quota / cold replica). Live layers on the globe are unaffected.</div>
       </div>
     );
   }
   if (!data) {
     return (
       <div className="observatory">
-        <ObsHeader persona={persona} setPersona={setPersona} status={loading ? "loading" : undefined} />
+        <ObsHeader persona={persona} setPersona={setPersona} tab={tab} setTab={setTab} status={loading ? "loading" : undefined} />
         <div className="obs-empty">{loading ? "Computing cross-domain analytics…" : "No analytics yet."}</div>
       </div>
     );
@@ -45,45 +50,91 @@ export default function Observatory() {
 
   return (
     <div className="observatory">
-      <ObsHeader persona={persona} setPersona={setPersona} generatedAt={data.generatedAt} status={data.status} />
+      <ObsHeader persona={persona} setPersona={setPersona} tab={tab} setTab={setTab} generatedAt={data.generatedAt} status={data.status} />
       {data.coverage?.hazardOnly && (
         <div className="obs-caveat">
-          <b>Coverage note:</b> no live conflict data in the vault right now, so <b>Risk</b> reflects
-          natural-hazard <i>severity</i> (earthquakes, storms, fires), not political conflict. Opportunity,
-          reach and entity signals are unaffected. Political-conflict scoring resumes when the conflict feed is live.
+          <b>Coverage note:</b> no live conflict data in the vault right now, so <b>Risk</b> reflects natural-hazard
+          <i> severity</i> (earthquakes, storms, fires), not political conflict. Opportunity, reach and entity signals are
+          unaffected. Political-conflict scoring resumes when the conflict feed is live.
         </div>
       )}
-      <Kpis data={data} persona={persona} />
-      <div className="obs-grid">
-        <InsightFeed data={data} persona={persona} />
-        <div className="obs-side">
-          <Leaderboard data={data} persona={persona} />
-          <Dependencies data={data} />
-          <Influence data={data} />
+
+      {tab === "overview" && (
+        <>
+          <Kpis data={data} persona={persona} />
+          <div className="obs-grid">
+            <InsightFeed data={data} persona={persona} />
+            <div className="obs-side">
+              <Leaderboard data={data} persona={persona} />
+              <Influence data={data} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === "explore" && (
+        <div className="feat-grid">
+          <QuadrantScatter data={data} />
+          <WeightBuilder data={data} />
+          <CorrelationHeatmap data={data} />
+          <DistributionPanel data={data} />
+          <RiskAdjusted data={data} />
+          <ExpectedImpact data={data} />
+          <OutlierBoard data={data} />
+          <CompoundRisk data={data} />
+          <RegionalRollup data={data} />
         </div>
-      </div>
+      )}
+
+      {tab === "compare" && (
+        <div className="feat-grid">
+          <CompareCountries data={data} />
+          <SimilarCountries data={data} />
+        </div>
+      )}
+
+      {tab === "network" && (
+        <div className="feat-grid">
+          <EntityNetwork data={data} />
+          <ConcentrationPanel data={data} />
+        </div>
+      )}
+
+      {tab === "method" && (
+        <div className="feat-grid">
+          <MethodPanel />
+          <DataTable data={data} />
+        </div>
+      )}
     </div>
   );
 }
 
-function ObsHeader({ persona, setPersona, generatedAt, status }: { persona: Persona; setPersona: (p: Persona) => void; generatedAt?: string; status?: string }) {
+function ObsHeader({ persona, setPersona, tab, setTab, generatedAt, status }: {
+  persona: Persona; setPersona: (p: Persona) => void; tab: Tab; setTab: (t: Tab) => void; generatedAt?: string; status?: string;
+}) {
   return (
-    <div className="obs-head">
-      <div className="obs-title">
-        <h2>OBSERVATORY</h2>
-        <span className="obs-sub">Cross-domain risk · opportunity · dependency intelligence</span>
+    <div className="obs-headwrap">
+      <div className="obs-head">
+        <div className="obs-title">
+          <h2>OBSERVATORY</h2>
+          <span className="obs-sub">Cross-domain risk · opportunity · dependency intelligence</span>
+        </div>
+        <div className="obs-persona" role="group" aria-label="Persona lens">
+          {PERSONAS.map((p) => (
+            <button key={p.id} className={persona === p.id ? "active" : ""} onClick={() => setPersona(p.id)} title={p.blurb} aria-pressed={persona === p.id}>{p.label}</button>
+          ))}
+        </div>
+        <div className="obs-meta">
+          {status && <span className={`obs-status s-${status}`}>{status}</span>}
+          {generatedAt && <span className="obs-time">{new Date(generatedAt).toISOString().slice(11, 19)} UTC</span>}
+        </div>
       </div>
-      <div className="obs-persona" role="group" aria-label="Persona lens">
-        {PERSONAS.map((p) => (
-          <button key={p.id} className={persona === p.id ? "active" : ""} onClick={() => setPersona(p.id)} title={p.blurb} aria-pressed={persona === p.id}>
-            {p.label}
-          </button>
+      <nav className="obs-tabs" aria-label="Dashboard sections">
+        {TABS.map((t) => (
+          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)} aria-pressed={tab === t.id}>{t.label}</button>
         ))}
-      </div>
-      <div className="obs-meta">
-        {status && <span className={`obs-status s-${status}`}>{status}</span>}
-        {generatedAt && <span className="obs-time">{new Date(generatedAt).toISOString().slice(11, 19)} UTC</span>}
-      </div>
+      </nav>
     </div>
   );
 }
@@ -135,9 +186,7 @@ function InsightFeed({ data, persona }: { data: DashPayload; persona: Persona })
     <div className="obs-panel obs-insights">
       <h3>Signals & insights {persona !== "all" && <em>· {persona}</em>}</h3>
       {list.length === 0 && <div className="obs-empty small">No insights for this lens yet.</div>}
-      <ul className="insight-list">
-        {list.map((i) => <InsightCard key={i.id} i={i} showPersona={persona === "all"} />)}
-      </ul>
+      <ul className="insight-list">{list.map((i) => <InsightCard key={i.id} i={i} showPersona={persona === "all"} />)}</ul>
     </div>
   );
 }
@@ -152,11 +201,7 @@ function InsightCard({ i, showPersona }: { i: DashInsight; showPersona: boolean 
       </div>
       <p className="insight-detail">{i.detail}</p>
       {i.metrics.length > 0 && (
-        <div className="insight-metrics">
-          {i.metrics.map((m, n) => (
-            <span key={n} className="metric"><b>{m.value}</b> {m.label}</span>
-          ))}
-        </div>
+        <div className="insight-metrics">{i.metrics.map((m, n) => <span key={n} className="metric"><b>{m.value}</b> {m.label}</span>)}</div>
       )}
     </li>
   );
@@ -188,27 +233,6 @@ function Leaderboard({ data, persona }: { data: DashPayload; persona: Persona })
   );
 }
 
-function Dependencies({ data }: { data: DashPayload }) {
-  return (
-    <div className="obs-panel">
-      <h3>Cross-domain dependencies</h3>
-      <ul className="corr-list">
-        {data.correlations.map((c) => {
-          const strong = Math.abs(c.r) >= 0.5;
-          const tone = c.r >= 0 ? "pos" : "neg";
-          return (
-            <li key={c.label} className="corr-row">
-              <span className="corr-label">{c.label}</span>
-              <span className={`corr-r ${tone} ${strong ? "strong" : ""}`}>r = {c.r.toFixed(2)}</span>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="obs-note">Pearson correlation across {data.scores.length} countries. |r| ≥ 0.5 = strong co-movement.</p>
-    </div>
-  );
-}
-
 function Influence({ data }: { data: DashPayload }) {
   return (
     <div className="obs-panel">
@@ -216,19 +240,11 @@ function Influence({ data }: { data: DashPayload }) {
       <div className="infl-cols">
         <div>
           <h4>Most connected</h4>
-          <ul className="infl-list">
-            {data.entities.connected.slice(0, 6).map((e) => (
-              <li key={e.name}><span>{e.name}</span><b>{e.degree ?? 0}</b></li>
-            ))}
-          </ul>
+          <ul className="infl-list">{data.entities.connected.slice(0, 6).map((e) => <li key={e.name}><span>{e.name}</span><b>{e.degree ?? 0}</b></li>)}</ul>
         </div>
         <div>
           <h4>Top mentioned</h4>
-          <ul className="infl-list">
-            {data.entities.persons.slice(0, 6).map((e) => (
-              <li key={e.name}><span>{e.name}</span><b>{e.mentions}</b></li>
-            ))}
-          </ul>
+          <ul className="infl-list">{data.entities.persons.slice(0, 6).map((e) => <li key={e.name}><span>{e.name}</span><b>{e.mentions}</b></li>)}</ul>
         </div>
       </div>
     </div>

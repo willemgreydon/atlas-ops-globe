@@ -300,3 +300,120 @@ function fmt(n: number): string {
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
+
+// ===========================================================================
+// Mathematical toolkit — the "exploration" math behind the Observatory panels.
+// All pure & deterministic (no Math.random) so every equation is unit-tested.
+// ===========================================================================
+
+export interface Stats { mean: number; median: number; std: number; min: number; max: number; q1: number; q3: number; n: number; }
+
+/** Descriptive statistics of a sample.  σ = √(Σ(xᵢ−μ)² / n). */
+export function describe(values: number[]): Stats {
+  const n = values.length;
+  if (n === 0) return { mean: 0, median: 0, std: 0, min: 0, max: 0, q1: 0, q3: 0, n: 0 };
+  const sorted = [...values].sort((a, b) => a - b);
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  const q = (p: number) => {
+    const idx = p * (n - 1);
+    const lo = Math.floor(idx), hi = Math.ceil(idx);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+  };
+  return { mean, median: q(0.5), std: Math.sqrt(variance), min: sorted[0], max: sorted[n - 1], q1: q(0.25), q3: q(0.75), n };
+}
+
+/** Standard score of each value: zᵢ = (xᵢ − μ) / σ.  (0 if σ = 0.) */
+export function zScores(values: number[]): number[] {
+  const { mean, std } = describe(values);
+  if (std === 0) return values.map(() => 0);
+  return values.map((v) => (v - mean) / std);
+}
+
+/** Percentile rank (0..100) of each value within the sample (≤ definition). */
+export function percentileRanks(values: number[]): number[] {
+  const n = values.length;
+  if (n <= 1) return values.map(() => 100);
+  return values.map((v) => (values.filter((w) => w <= v).length / n) * 100);
+}
+
+/** Gini coefficient (0 = perfectly equal, 1 = maximally concentrated). */
+export function gini(values: number[]): number {
+  const xs = values.filter((v) => v >= 0);
+  const n = xs.length;
+  const sum = xs.reduce((a, b) => a + b, 0);
+  if (n === 0 || sum === 0) return 0;
+  const sorted = [...xs].sort((a, b) => a - b);
+  let cum = 0;
+  for (let i = 0; i < n; i++) cum += (i + 1) * sorted[i];
+  return Math.max(0, Math.min(1, (2 * cum) / (n * sum) - (n + 1) / n));
+}
+
+/** Normalised Herfindahl–Hirschman Index (0 = fragmented, 1 = monopoly).
+ *  H = Σ sᵢ² over market shares sᵢ; normalised H* = (H − 1/n)/(1 − 1/n). */
+export function hhi(values: number[]): number {
+  const xs = values.filter((v) => v > 0);
+  const n = xs.length;
+  const sum = xs.reduce((a, b) => a + b, 0);
+  if (n <= 1 || sum === 0) return n === 1 ? 1 : 0;
+  const h = xs.reduce((a, v) => a + (v / sum) ** 2, 0);
+  return Math.max(0, Math.min(1, (h - 1 / n) / (1 - 1 / n)));
+}
+
+/** Cosine similarity of two equal-length vectors: (a·b)/(‖a‖‖b‖), −1..1. */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  const n = Math.min(a.length, b.length);
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < n; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+/** Full pairwise Pearson correlation matrix over named signal vectors. */
+export function correlationMatrix(vectors: Record<string, number[]>): { keys: string[]; matrix: number[][] } {
+  const keys = Object.keys(vectors);
+  const matrix = keys.map((k1) => keys.map((k2) => (k1 === k2 ? 1 : Math.round(pearson(vectors[k1], vectors[k2]) * 100) / 100)));
+  return { keys, matrix };
+}
+
+/** Indices of points on the Pareto frontier that MAXIMISES both x and y
+ *  (no other point dominates them on both axes). */
+export function paretoFrontier(points: { x: number; y: number }[]): number[] {
+  return points
+    .map((_, i) => i)
+    .filter((i) => !points.some((q, j) => j !== i && q.x >= points[i].x && q.y >= points[i].y && (q.x > points[i].x || q.y > points[i].y)));
+}
+
+/** Deterministic k-means over n-dim points. Centroids seeded evenly across the
+ *  set ordered by first dimension, so results are stable & testable. */
+export function kMeans(points: number[][], k: number, iters = 20): { assignments: number[]; centroids: number[][] } {
+  const n = points.length;
+  if (n === 0 || k <= 0) return { assignments: [], centroids: [] };
+  const kk = Math.min(k, n);
+  const dim = points[0].length;
+  const order = points.map((_, i) => i).sort((a, b) => points[a][0] - points[b][0]);
+  let centroids = Array.from({ length: kk }, (_, c) => points[order[Math.floor((c * (n - 1)) / Math.max(1, kk - 1))]].slice());
+  const assignments = new Array(n).fill(0);
+  const dist2 = (a: number[], b: number[]) => a.reduce((s, v, d) => s + (v - b[d]) ** 2, 0);
+  for (let it = 0; it < iters; it++) {
+    let moved = false;
+    for (let i = 0; i < n; i++) {
+      let best = 0, bd = Infinity;
+      for (let c = 0; c < kk; c++) { const d = dist2(points[i], centroids[c]); if (d < bd) { bd = d; best = c; } }
+      if (assignments[i] !== best) { assignments[i] = best; moved = true; }
+    }
+    const sums = Array.from({ length: kk }, () => new Array(dim).fill(0));
+    const counts = new Array(kk).fill(0);
+    for (let i = 0; i < n; i++) { counts[assignments[i]]++; for (let d = 0; d < dim; d++) sums[assignments[i]][d] += points[i][d]; }
+    centroids = centroids.map((c, ci) => (counts[ci] ? sums[ci].map((s) => s / counts[ci]) : c));
+    if (!moved && it > 0) break;
+  }
+  return { assignments, centroids };
+}
+
+/** Weighted composite of already-normalised (0..1) signals → 0..100. */
+export function weightedScore(norms: Record<string, number>, weights: Record<string, number>): number {
+  let num = 0, den = 0;
+  for (const k of Object.keys(weights)) { num += (norms[k] ?? 0) * weights[k]; den += Math.abs(weights[k]); }
+  return den === 0 ? 0 : Math.round(Math.max(0, Math.min(1, num / den)) * 100);
+}

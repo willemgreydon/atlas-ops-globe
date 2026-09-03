@@ -82,3 +82,67 @@ describe("buildInsights", () => {
     expect(insights.some((i) => i.persona === "marketing" && i.kind === "opportunity" && i.title.includes("Calmland"))).toBe(true);
   });
 });
+
+import { describe as descStats, zScores, percentileRanks, gini, hhi, cosineSimilarity, correlationMatrix, paretoFrontier, kMeans, weightedScore } from "@/lib/intel/analytics";
+
+describe("math toolkit", () => {
+  it("describe: mean/median/std/quartiles", () => {
+    const s = descStats([1, 2, 3, 4, 5]);
+    expect(s.mean).toBe(3);
+    expect(s.median).toBe(3);
+    expect(s.std).toBeCloseTo(Math.sqrt(2), 6);
+    expect(s.q1).toBe(2); expect(s.q3).toBe(4);
+    expect(descStats([]).n).toBe(0);
+  });
+  it("zScores: standardised, 0 when flat", () => {
+    const z = zScores([1, 2, 3, 4, 5]);
+    expect(z[2]).toBeCloseTo(0, 6);
+    expect(z[4]).toBeCloseTo(Math.sqrt(2), 6);
+    expect(zScores([7, 7, 7])).toEqual([0, 0, 0]);
+  });
+  it("percentileRanks: top value is 100", () => {
+    const p = percentileRanks([10, 20, 30, 40]);
+    expect(p[3]).toBe(100);
+    expect(p[0]).toBe(25);
+  });
+  it("gini: 0 for equal, high for concentrated", () => {
+    expect(gini([5, 5, 5, 5])).toBeCloseTo(0, 6);
+    expect(gini([0, 0, 0, 100])).toBeGreaterThan(0.6);
+  });
+  it("hhi: ~0 fragmented, 1 monopoly", () => {
+    expect(hhi([1, 1, 1, 1])).toBeCloseTo(0, 6);
+    expect(hhi([100])).toBe(1);
+    expect(hhi([90, 5, 5])).toBeGreaterThan(0.5);
+  });
+  it("cosineSimilarity: 1 parallel, 0 orthogonal", () => {
+    expect(cosineSimilarity([1, 2, 3], [2, 4, 6])).toBeCloseTo(1, 6);
+    expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0, 6);
+  });
+  it("correlationMatrix: symmetric with unit diagonal", () => {
+    const { keys, matrix } = correlationMatrix({ a: [1, 2, 3], b: [3, 2, 1], c: [1, 2, 3] });
+    expect(keys).toEqual(["a", "b", "c"]);
+    expect(matrix[0][0]).toBe(1);
+    expect(matrix[0][1]).toBeCloseTo(-1, 2);
+    expect(matrix[0][2]).toBeCloseTo(1, 2);
+    expect(matrix[0][1]).toBe(matrix[1][0]);
+  });
+  it("paretoFrontier: keeps only non-dominated (maximise both)", () => {
+    const pts = [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 1 }, { x: 1, y: 3 }];
+    const f = paretoFrontier(pts).sort();
+    expect(f).toContain(1); // (2,2) dominates (1,1)
+    expect(f).toContain(2); // (3,1) non-dominated on x
+    expect(f).toContain(3); // (1,3) non-dominated on y
+    expect(f).not.toContain(0); // (1,1) dominated
+  });
+  it("kMeans: separates two clusters deterministically", () => {
+    const pts = [[0, 0], [0.2, 0.1], [10, 10], [10.1, 9.9]];
+    const { assignments } = kMeans(pts, 2);
+    expect(assignments[0]).toBe(assignments[1]);
+    expect(assignments[2]).toBe(assignments[3]);
+    expect(assignments[0]).not.toBe(assignments[2]);
+  });
+  it("weightedScore: normalised weighted blend → 0..100", () => {
+    expect(weightedScore({ a: 1, b: 0 }, { a: 1, b: 1 })).toBe(50);
+    expect(weightedScore({ a: 1, b: 1 }, { a: 2, b: 1 })).toBe(100);
+  });
+});
