@@ -16,11 +16,15 @@ export default function LayerManager() {
     switch (feed) {
       case "aircraft": return app.aircraft.meta?.status;
       case "airports": return app.airports.meta?.status;
+      case "powerplants": return app.powerplants.meta?.status;
+      case "ports": return app.ports.meta?.status;
+      case "volcanoes": return app.volcanoes.meta?.status;
       case "events": return app.events.meta?.status;
       case "news": return app.news.meta?.status;
       case "vessels": return app.vessels.meta?.status;
       case "weather": return app.weather.meta?.status;
       case "airquality": return app.airquality.meta?.status;
+      case "conflict": return app.conflict.meta?.status;
       case "satellites": return app.satellites.meta?.status;
       default: return undefined;
     }

@@ -22,7 +22,7 @@ import {
 import { ImageryLayer, Viewer, type CesiumComponentRef } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { loadSgp4 } from "@/lib/sgp4-client";
-import { useApp, type Airport, type AirQualityRow, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type Airport, type AirQualityRow, type PowerPlant, type Port, type Volcano, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import type { AircraftState, NewsItem, Severity, WorldEvent } from "@/types/domain";
 import { configureScene } from "@/lib/globe/scene";
@@ -38,6 +38,8 @@ import { OrbitTrail } from "@/lib/globe/render/orbits";
 import { FocusOverlay } from "@/lib/globe/render/focus";
 import { TerrainController } from "@/lib/globe/terrain";
 import { CelestialEnvironment } from "@/lib/globe/render/celestial";
+import { disposeModels } from "@/lib/globe/models/registry";
+import { FrameGovernor } from "@/lib/globe/render/frame";
 import { EffectsLayer } from "@/lib/globe/render/effects";
 import { EntityTrail } from "@/lib/globe/render/trails";
 import { CoverageCone } from "@/lib/globe/render/coverage";
@@ -154,6 +156,7 @@ export default function Globe() {
   const coneRef = useRef<CoverageCone | null>(null);
   const terrainRef = useRef<TerrainController | null>(null);
   const lodRef = useRef<LodController | null>(null);
+  const governorRef = useRef<FrameGovernor | null>(null);
   // Latest scene config, read by the create-once bootstrap without re-running it.
   const configRef = useRef({ quality: app.quality, atmosphere: app.atmosphere, lighting: app.lighting, autoQuality: app.autoQuality, environment: app.environment, terrain: app.terrain });
   useEffect(() => {
@@ -190,6 +193,11 @@ export default function Globe() {
     const lod = new LodController(viewer);
     lod.setMaxLabels(QUALITY_PRESETS[cfg.quality].maxLabels);
     lod.start();
+    // Request-driven rendering: render only when something animates, capped at
+    // 60fps, idle otherwise (mission §3 §71). Must start LAST so every other
+    // manager's initial scene mutation lands before the pump takes over.
+    const governor = new FrameGovernor(viewer);
+    governor.start();
     camRef.current = camera;
     perfRef.current = performance;
     focusRef.current = focus;
@@ -199,6 +207,7 @@ export default function Globe() {
     coneRef.current = cone;
     terrainRef.current = terrain;
     lodRef.current = lod;
+    governorRef.current = governor;
     setGlobeRuntime({ viewer, performance, camera, lod });
 
     // Dev-only selection bridge for diagnostics / e2e probes (mission §117).
@@ -246,6 +255,8 @@ export default function Globe() {
       handler.destroy();
       setHover(null);
       setGlobeRuntime(null);
+      // Restore continuous rendering first, so every subsequent dispose repaints.
+      governor.dispose();
       performance.dispose();
       camera.dispose();
       focus.dispose();
@@ -255,6 +266,7 @@ export default function Globe() {
       cone.dispose();
       terrain.dispose();
       lod.dispose();
+      disposeModels();
       perfRef.current = null;
       camRef.current = null;
       focusRef.current = null;
@@ -264,11 +276,25 @@ export default function Globe() {
       coneRef.current = null;
       terrainRef.current = null;
       lodRef.current = null;
+      governorRef.current = null;
       if (process.env.NODE_ENV !== "production") {
         delete (window as unknown as { __globeSelect?: unknown }).__globeSelect;
       }
     };
   }, [ready]);
+
+  // Keep the frame pump in continuous mode whenever something genuinely
+  // animates: live tracks (SGP4 / dead-reckoning), an active selection (focus
+  // pulse, coverage cone, trail) or effect ripples. Everything else — static
+  // layers, a still camera — coasts on the idle heartbeat, which still repaints
+  // any data update within a frame or two (mission §3).
+  useEffect(() => {
+    const g = governorRef.current;
+    if (!g) return;
+    g.setAnimating("motion", app.layers.space || app.layers.aircraft || app.layers.maritime);
+    g.setAnimating("selection", !!app.selection);
+    g.setAnimating("effects", app.effects && (app.layers.earthquakes || app.layers.naturalEvents || app.layers.conflict));
+  }, [ready, app.layers.space, app.layers.aircraft, app.layers.maritime, app.selection, app.effects, app.layers.earthquakes, app.layers.naturalEvents, app.layers.conflict]);
 
   // --- react to quality / atmosphere / lighting changes ---------------------
   useEffect(() => {
@@ -484,6 +510,60 @@ export default function Globe() {
     return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); airportsLayer.current = null; };
   }, [ready, app.layers.airports]);
 
+  // --- power plants layer (static WRI DB; dense over CN/RU/AU) ---------------
+  const powerPlantsLayer = useRef<StaticLayer<PowerPlant> | null>(null);
+  const powerPlantRows = useRef<PowerPlant[]>([]);
+  useEffect(() => {
+    powerPlantRows.current = app.powerplants.rows;
+    powerPlantsLayer.current?.update(app.powerplants.rows);
+  }, [app.powerplants.rows]);
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!ready || !viewer || !app.layers.powerplants) return;
+    const layer = createPowerPlantsLayer(viewer);
+    layer.mount();
+    layer.update(powerPlantRows.current);
+    powerPlantsLayer.current = layer;
+    lodRef.current?.register("powerplants", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); powerPlantsLayer.current = null; };
+  }, [ready, app.layers.powerplants]);
+
+  // --- ports layer (static NGA World Port Index) ----------------------------
+  const portsLayer = useRef<StaticLayer<Port> | null>(null);
+  const portRows = useRef<Port[]>([]);
+  useEffect(() => {
+    portRows.current = app.ports.rows;
+    portsLayer.current?.update(app.ports.rows);
+  }, [app.ports.rows]);
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!ready || !viewer || !app.layers.ports) return;
+    const layer = createPortsLayer(viewer);
+    layer.mount();
+    layer.update(portRows.current);
+    portsLayer.current = layer;
+    lodRef.current?.register("ports", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); portsLayer.current = null; };
+  }, [ready, app.layers.ports]);
+
+  // --- volcanoes layer (static Smithsonian GVP Holocene list) ---------------
+  const volcanoesLayer = useRef<StaticLayer<Volcano> | null>(null);
+  const volcanoRows = useRef<Volcano[]>([]);
+  useEffect(() => {
+    volcanoRows.current = app.volcanoes.rows;
+    volcanoesLayer.current?.update(app.volcanoes.rows);
+  }, [app.volcanoes.rows]);
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!ready || !viewer || !app.layers.volcanoes) return;
+    const layer = createVolcanoesLayer(viewer);
+    layer.mount();
+    layer.update(volcanoRows.current);
+    volcanoesLayer.current = layer;
+    lodRef.current?.register("volcanoes", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); volcanoesLayer.current = null; };
+  }, [ready, app.layers.volcanoes]);
+
   // --- air-quality layer (Open-Meteo US AQI at world cities) ----------------
   const airQualityLayer = useRef<StaticLayer<AirQualityRow> | null>(null);
   const airQualityRows = useRef<AirQualityRow[]>([]);
@@ -539,6 +619,7 @@ export default function Globe() {
     aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
     conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
     airports: app.airports.rows, airquality: app.airquality.rows,
+    powerplants: app.powerplants.rows, ports: app.ports.rows, volcanoes: app.volcanoes.rows,
   });
   useEffect(() => {
     // Deliberate latest-value ref: the focus/hover effects read these rows to
@@ -551,8 +632,9 @@ export default function Globe() {
       aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
       conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
       airports: app.airports.rows, airquality: app.airquality.rows,
+      powerplants: app.powerplants.rows, ports: app.ports.rows, volcanoes: app.volcanoes.rows,
     };
-  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows, app.airports.rows, app.airquality.rows]);
+  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows, app.airports.rows, app.airquality.rows, app.powerplants.rows, app.ports.rows, app.volcanoes.rows]);
 
   // --- focus mode: follow (moving) or fly-to (static) the selection ---------
   // Moving objects (aircraft/vessel/satellite) are *tracked* (§19): the camera
@@ -661,6 +743,27 @@ export default function Globe() {
         orbitTrail.current?.hide();
         break;
       }
+      case "powerplant": {
+        untrack();
+        const p = feeds.powerplants.find((r) => r.id === sel.id);
+        if (p) { cam.flyToPoint(p.lon, p.lat, 150_000); focus?.showAt(Cartesian3.fromDegrees(p.lon, p.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
+      case "port": {
+        untrack();
+        const p = feeds.ports.find((r) => r.id === sel.id);
+        if (p) { cam.flyToPoint(p.lon, p.lat, 150_000); focus?.showAt(Cartesian3.fromDegrees(p.lon, p.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
+      case "volcano": {
+        untrack();
+        const v = feeds.volcanoes.find((r) => r.id === sel.id);
+        if (v) { cam.flyToPoint(v.lon, v.lat, 200_000); focus?.showAt(Cartesian3.fromDegrees(v.lon, v.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
       default:
         untrack();
         orbitTrail.current?.hide();
@@ -748,6 +851,9 @@ interface HoverFeeds {
   satellites: SatelliteRow[];
   airports: Airport[];
   airquality: AirQualityRow[];
+  powerplants: PowerPlant[];
+  ports: Port[];
+  volcanoes: Volcano[];
 }
 
 /** Resolve a picked scene object into a hover tooltip payload (or null). */
@@ -803,6 +909,18 @@ function hoverForSelection(sel: NonNullable<Selection>, feeds: HoverFeeds, x: nu
     case "airquality": {
       const aq = feeds.airquality.find((r) => r.id === sel.id);
       return aq ? { x, y, kind: "AIR QUALITY", title: `${aq.place} · AQI ${aq.aqi}`, subtitle: aq.pm25 != null ? `PM2.5 ${Math.round(aq.pm25)}` : undefined, color: aqiColor(aq.aqi).toCssColorString() } : null;
+    }
+    case "powerplant": {
+      const p = feeds.powerplants.find((r) => r.id === sel.id);
+      return p ? { x, y, kind: "POWER PLANT", title: p.name, subtitle: join([p.fuel, `${p.mw} MW`, p.country]), color: fuelColor(p.fuel).toCssColorString() } : null;
+    }
+    case "port": {
+      const p = feeds.ports.find((r) => r.id === sel.id);
+      return p ? { x, y, kind: "PORT", title: p.name, subtitle: join([p.country, portSizeLabel(p.size)]), color: LAYER_BY_ID.ports.color } : null;
+    }
+    case "volcano": {
+      const v = feeds.volcanoes.find((r) => r.id === sel.id);
+      return v ? { x, y, kind: "VOLCANO", title: v.name, subtitle: join([v.type, v.lastEruption != null ? `last ${v.lastEruption}` : undefined]), color: LAYER_BY_ID.volcanoes.color } : null;
     }
     default:
       return null;
@@ -942,6 +1060,105 @@ function airportGraphics(a: Airport): CesiumEntity.ConstructorOptions {
       // Fade the smaller airports out when zoomed far so the globe isn't a wall
       // of dots; larger hubs stay visible longer.
       scaleByDistance: new NearFarScalar(3.0e6, 1.0, 2.0e7, a.large ? 0.5 : 0.25),
+    },
+  };
+}
+
+// Power-plant colour by fuel class — reads as an energy-mix map at a glance.
+const FUEL_COLORS: Record<string, string> = {
+  coal: "#6b6f76",
+  gas: "#ff9e57",
+  oil: "#b5651d",
+  nuclear: "#b18cff",
+  hydro: "#4fa8ff",
+  wind: "#8fe3c2",
+  solar: "#ffd24a",
+  geothermal: "#ff6f61",
+  biomass: "#7cbf5a",
+  other: "#9fb2c8",
+};
+function fuelColor(fuel: string): Color {
+  return Color.fromCssColorString(FUEL_COLORS[fuel] ?? FUEL_COLORS.other);
+}
+
+function createPowerPlantsLayer(viewer: CesiumViewer): StaticLayer<PowerPlant> {
+  return new StaticLayer<PowerPlant>(viewer, selectionMap, {
+    name: "powerplants",
+    position: (p) => Cartesian3.fromDegrees(p.lon, p.lat, 0),
+    build: (p) => powerPlantGraphics(p),
+    selection: (p) => ({ kind: "powerplant", id: p.id }),
+  });
+}
+
+function powerPlantGraphics(p: PowerPlant): CesiumEntity.ConstructorOptions {
+  // Bigger dot for bigger plants (GW-scale reads as a hub); fade the small ones
+  // out at distance so a dense grid isn't a wall of dots.
+  const big = p.mw >= 1000;
+  const size = p.mw >= 2000 ? 8 : p.mw >= 500 ? 6 : p.mw >= 100 ? 5 : 4;
+  return {
+    point: {
+      pixelSize: size,
+      color: fuelColor(p.fuel).withAlpha(0.9),
+      outlineColor: Color.BLACK.withAlpha(0.35),
+      outlineWidth: 1,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+      scaleByDistance: new NearFarScalar(3.0e6, 1.0, 2.0e7, big ? 0.55 : 0.25),
+    },
+  };
+}
+
+function portSizeLabel(size?: string): string | undefined {
+  return size ? { xs: "very small", s: "small", m: "medium", l: "large" }[size] : undefined;
+}
+
+function createPortsLayer(viewer: CesiumViewer): StaticLayer<Port> {
+  return new StaticLayer<Port>(viewer, selectionMap, {
+    name: "ports",
+    position: (p) => Cartesian3.fromDegrees(p.lon, p.lat, 0),
+    build: (p) => portGraphics(p),
+    selection: (p) => ({ kind: "port", id: p.id }),
+  });
+}
+
+function portGraphics(p: Port): CesiumEntity.ConstructorOptions {
+  const large = p.size === "l" || p.size === "m";
+  const color = Color.fromCssColorString(LAYER_BY_ID.ports.color);
+  return {
+    point: {
+      pixelSize: p.size === "l" ? 7 : p.size === "m" ? 5 : 4,
+      color: color.withAlpha(large ? 0.95 : 0.7),
+      outlineColor: Color.BLACK.withAlpha(0.35),
+      outlineWidth: 1,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+      scaleByDistance: new NearFarScalar(3.0e6, 1.0, 2.0e7, large ? 0.5 : 0.25),
+    },
+  };
+}
+
+function createVolcanoesLayer(viewer: CesiumViewer): StaticLayer<Volcano> {
+  return new StaticLayer<Volcano>(viewer, selectionMap, {
+    name: "volcanoes",
+    position: (v) => Cartesian3.fromDegrees(v.lon, v.lat, 0),
+    build: (v) => volcanoGraphics(v),
+    selection: (v) => ({ kind: "volcano", id: v.id }),
+  });
+}
+
+function volcanoGraphics(v: Volcano): CesiumEntity.ConstructorOptions {
+  // Brighter/larger for volcanoes with a Holocene eruption in the last ~200y.
+  const recent = v.lastEruption != null && v.lastEruption >= 1800;
+  const base = Color.fromCssColorString(LAYER_BY_ID.volcanoes.color);
+  return {
+    point: {
+      pixelSize: recent ? 7 : 5,
+      color: (recent ? base : base.withAlpha(0.7)),
+      outlineColor: Color.fromCssColorString("#2a0d06").withAlpha(0.6),
+      outlineWidth: 1,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+      scaleByDistance: new NearFarScalar(3.0e6, 1.0, 2.0e7, recent ? 0.6 : 0.35),
     },
   };
 }

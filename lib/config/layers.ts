@@ -9,6 +9,9 @@ export type LayerId =
   | "countries"
   | "aircraft"
   | "airports"
+  | "powerplants"
+  | "ports"
+  | "volcanoes"
   | "earthquakes"
   | "naturalEvents"
   | "news"
@@ -27,7 +30,7 @@ export interface LayerDef {
   color: string;
   status: "active" | "planned";
   /** Which data feed drives this layer, for the fetch scheduler. */
-  feed?: "aircraft" | "events" | "news" | "countries" | "vessels" | "weather" | "satellites" | "airports" | "airquality";
+  feed?: "aircraft" | "events" | "news" | "countries" | "vessels" | "weather" | "satellites" | "airports" | "airquality" | "powerplants" | "ports" | "volcanoes" | "conflict";
   /** For event-driven layers, which event kinds/tags belong to this layer. */
   eventKinds?: EventKind[];
   providerNote?: string;
@@ -37,11 +40,14 @@ export const LAYERS: LayerDef[] = [
   { id: "countries", label: "Country borders", color: "#8aa0b6", status: "active", feed: "countries" },
   { id: "aircraft", label: "Aircraft / ADS-B", color: "#65f6c7", status: "active", feed: "aircraft", providerNote: "OpenSky Network" },
   { id: "airports", label: "Airports", color: "#9fb2c8", status: "active", feed: "airports", providerNote: "OurAirports (public domain)" },
+  { id: "powerplants", label: "Power plants", color: "#ffd08a", status: "active", feed: "powerplants", providerNote: "WRI Global Power Plant DB (CC-BY) — dense over CN/RU/AU" },
+  { id: "ports", label: "Ports & harbors", color: "#7fe0e6", status: "active", feed: "ports", providerNote: "NGA World Port Index (public domain)" },
+  { id: "volcanoes", label: "Volcanoes", color: "#ff7043", status: "active", feed: "volcanoes", providerNote: "Smithsonian GVP (Holocene)" },
   { id: "earthquakes", label: "Earthquakes", color: "#ffae45", status: "active", feed: "events", eventKinds: ["disaster"], providerNote: "USGS" },
   { id: "naturalEvents", label: "Natural events", color: "#ff8a5b", status: "active", feed: "events", eventKinds: ["disaster"], providerNote: "NASA EONET" },
   { id: "news", label: "News & entities", color: "#54c7ff", status: "active", feed: "news", providerNote: "GDELT" },
   { id: "maritime", label: "Maritime / AIS", color: "#4fd6d1", status: "active", feed: "vessels", providerNote: "AISStream.io — live global AIS" },
-  { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "active", feed: "events", providerNote: "ACLED (needs myACLED login)" },
+  { id: "conflict", label: "Conflict & unrest", color: "#ff5a62", status: "active", feed: "conflict", providerNote: "UCDP live (needs UCDP_ACCESS_TOKEN) + ACLED vault" },
   { id: "cyber", label: "Cyber exposure", color: "#b18cff", status: "planned", providerNote: "CISA KEV / NVD (planned)" },
   { id: "weather", label: "Weather (cities)", color: "#9ad7ff", status: "active", feed: "weather", providerNote: "Open-Meteo current conditions" },
   { id: "airquality", label: "Air quality", color: "#c8a2ff", status: "active", feed: "airquality", providerNote: "Open-Meteo US AQI" },

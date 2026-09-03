@@ -35,6 +35,9 @@ export type LodBand = "orbit" | "continent" | "country" | "regional" | "city";
 export type LodLayerKind =
   | "aircraft"
   | "airports"
+  | "powerplants"
+  | "ports"
+  | "volcanoes"
   | "vessels"
   | "satellites"
   | "events"
@@ -68,6 +71,9 @@ export const LOD_POLICY: Partial<Record<LodLayerKind, { minHeight?: number; maxH
   news: { maxHeight: 8_000_000 },
   airports: { maxHeight: 8_000_000 }, // a 5k-dot field is noise from orbit
   airquality: { maxHeight: 8_000_000 },
+  powerplants: { maxHeight: 8_000_000 }, // ~14k dots — declutter from orbit
+  ports: { maxHeight: 8_000_000 },
+  // volcanoes (~1.2k) stay visible at all heights — they read as landmarks.
 };
 
 /** Classify a camera height (metres above the surface) into a zoom band. */

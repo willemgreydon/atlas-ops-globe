@@ -26,7 +26,7 @@ export interface ModeDef {
 export const MODES: ModeDef[] = [
   { id: "global", label: "Global", operational: true, defaultLayers: ["countries", "aircraft", "earthquakes", "naturalEvents", "news"], blurb: "All active intelligence layers fused on one surface." },
   { id: "aviation", label: "Aviation", operational: true, defaultLayers: ["countries", "aircraft"], blurb: "Live ADS-B aircraft positions from OpenSky." },
-  { id: "disasters", label: "Disasters", operational: true, defaultLayers: ["countries", "earthquakes", "naturalEvents"], blurb: "Earthquakes (USGS) and natural events (NASA EONET)." },
+  { id: "disasters", label: "Disasters", operational: true, defaultLayers: ["countries", "earthquakes", "naturalEvents", "volcanoes"], blurb: "Earthquakes (USGS), natural events (NASA EONET) and volcanoes (Smithsonian GVP)." },
   { id: "news", label: "News", operational: true, defaultLayers: ["countries", "news"], blurb: "Global news discovery via GDELT." },
   { id: "maritime", label: "Maritime", operational: true, defaultLayers: ["countries", "maritime"], blurb: "AIS vessel tracking (MarineTraffic) — needs an API key; offline until set." },
   { id: "cyber", label: "Cyber", operational: false, defaultLayers: ["countries", "cyber"], blurb: "Exploited vulnerabilities — CISA KEV/NVD (no globe layer yet)." },

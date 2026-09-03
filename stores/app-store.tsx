@@ -16,6 +16,9 @@ export type Selection =
   | { kind: "satellite"; id: string }
   | { kind: "airport"; id: string }
   | { kind: "airquality"; id: string }
+  | { kind: "powerplant"; id: string }
+  | { kind: "port"; id: string }
+  | { kind: "volcano"; id: string }
   | { kind: "country"; iso3: string; name?: string }
   | null;
 
@@ -29,6 +32,40 @@ export interface Airport {
   country?: string;
   large?: boolean;
   scheduled?: boolean;
+}
+
+/** Power plant from the static WRI Global Power Plant DB (/data/powerplants.json). */
+export interface PowerPlant {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  fuel: string; // coal | gas | oil | nuclear | hydro | wind | solar | geothermal | biomass | other
+  mw: number;
+  country?: string;
+}
+
+/** Port from the static NGA World Port Index (/data/ports.json). */
+export interface Port {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  country?: string;
+  size?: string; // xs | s | m | l
+  type?: string;
+}
+
+/** Volcano from the static Smithsonian GVP Holocene list (/data/volcanoes.json). */
+export interface Volcano {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  type?: string;
+  elevation?: number;
+  country?: string;
+  lastEruption?: number;
 }
 
 /** Air-quality point (Open-Meteo, US AQI) sampled at a world city. */
@@ -165,6 +202,12 @@ interface AppState {
   conflict: Feed<WorldEvent>;
   /** Airports (static OurAirports set); lazily loaded when the layer is enabled. */
   airports: Feed<Airport>;
+  /** Power plants (static WRI DB); dense over China/Russia/Australia. */
+  powerplants: Feed<PowerPlant>;
+  /** Ports & harbors (static NGA World Port Index). */
+  ports: Feed<Port>;
+  /** Volcanoes (static Smithsonian GVP Holocene list). */
+  volcanoes: Feed<Volcano>;
   /** Air-quality points (Open-Meteo US AQI) at world cities. */
   airquality: Feed<AirQualityRow>;
   /** Satellite catalogue (with TLEs) from the vault; propagated on the globe. */
@@ -340,25 +383,26 @@ function useFeed<T>(url: string, intervalMs: number, active: boolean, map?: (raw
   return state;
 }
 
-/** Airports are a static public-domain dataset — fetch the JSON once, lazily,
- *  the first time the layer is enabled (595 KB, immutable-cached). */
-function useAirports(active: boolean): Feed<Airport> {
-  const [state, setState] = useState<Feed<Airport>>({ rows: [], meta: null, loading: false });
+/** A static public-domain dataset shipped from /public/data — fetched once,
+ *  lazily, the first time its layer is enabled (immutable-cached). Shared by
+ *  airports, power plants, ports and volcanoes. */
+function useStaticJson<T>(url: string, source: string, active: boolean): Feed<T> {
+  const [state, setState] = useState<Feed<T>>({ rows: [], meta: null, loading: false });
   const loaded = useRef(false);
   useEffect(() => {
     if (!active || loaded.current) return;
     loaded.current = true;
     setState((s) => ({ ...s, loading: true }));
-    fetch("/data/airports.json")
+    fetch(url)
       .then((r) => r.json())
-      .then((rows: Airport[]) => {
-        const meta: FeedMeta = { status: "live", source: "OurAirports", cached: true, stale: false, fetchedAt: new Date().toISOString(), count: rows.length };
+      .then((rows: T[]) => {
+        const meta: FeedMeta = { status: "live", source, cached: true, stale: false, fetchedAt: new Date().toISOString(), count: rows.length };
         setState({ rows, meta, loading: false });
       })
       .catch((err) => {
-        setState({ rows: [], loading: false, meta: { status: "offline", source: "OurAirports", cached: false, stale: true, fetchedAt: new Date().toISOString(), error: String(err), count: 0 } });
+        setState({ rows: [], loading: false, meta: { status: "offline", source, cached: false, stale: true, fetchedAt: new Date().toISOString(), error: String(err), count: 0 } });
       });
-  }, [active]);
+  }, [active, url, source]); // url/source are stable per call site; the `loaded` ref still loads once
   return state;
 }
 
@@ -418,11 +462,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const weather = useFeed<WeatherRow>("/api/intelligence/weather?limit=200", POLL_MS.weather, layers.weather);
   // Markets drive the always-visible ticker, so poll regardless of layers.
   const markets = useFeed<MarketRow>("/api/intelligence/markets?limit=20", POLL_MS.markets, true);
-  // Conflict/unrest (ACLED) from the vault; mapped to WorldEvent for the globe.
-  const conflict = useFeed<WorldEvent>("/api/intelligence/events?kind=conflict&limit=500", POLL_MS.conflict, layers.conflict, vaultEventToWorld);
+  // Conflict/unrest — UCDP live (dense over Central Africa/Sahel; needs
+  // UCDP_ACCESS_TOKEN) merged with the ACLED vault baseline; WorldEvent shape.
+  const conflict = useFeed<WorldEvent>("/api/intelligence/conflict?limit=500", POLL_MS.conflict, layers.conflict, vaultEventToWorld);
   // Satellite catalogue with TLEs — propagated client-side via SGP4.
   const satellites = useFeed<SatelliteRow>("/api/intelligence/space?limit=900", POLL_MS.satellites, layers.space);
-  const airports = useAirports(layers.airports);
+  const airports = useStaticJson<Airport>("/data/airports.json", "OurAirports", layers.airports);
+  const powerplants = useStaticJson<PowerPlant>("/data/powerplants.json", "WRI Global Power Plant DB", layers.powerplants);
+  const ports = useStaticJson<Port>("/data/ports.json", "NGA World Port Index", layers.ports);
+  const volcanoes = useStaticJson<Volcano>("/data/volcanoes.json", "Smithsonian GVP", layers.volcanoes);
   const airquality = useFeed<AirQualityRow>("/api/intelligence/airquality", POLL_MS.satellites, layers.airquality);
   const vault = useVaultSnapshot();
 
@@ -447,6 +495,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       conflict,
       satellites,
       airports,
+      powerplants,
+      ports,
+      volcanoes,
       airquality,
       vault,
       flyTo,
@@ -468,7 +519,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       terrain,
       setTerrain,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, airquality, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, powerplants, ports, volcanoes, airquality, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

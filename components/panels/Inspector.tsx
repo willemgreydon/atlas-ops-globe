@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { loadSgp4, subpoint } from "@/lib/sgp4-client";
-import { useApp, type Airport, type AirQualityRow, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type Airport, type AirQualityRow, type PowerPlant, type Port, type Volcano, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { operatorFromCallsign } from "@/data/airlines-icao";
 import StatusBadge from "@/components/common/StatusBadge";
 import { safeHttpUrl } from "@/lib/safe-url";
@@ -53,6 +53,15 @@ export default function Inspector() {
   } else if (sel.kind === "airquality") {
     const aq = app.airquality.rows.find((r) => r.id === sel.id);
     body = aq ? <AirQualityView a={aq} /> : <Missing kind="Air quality" />;
+  } else if (sel.kind === "powerplant") {
+    const p = app.powerplants.rows.find((r) => r.id === sel.id);
+    body = p ? <PowerPlantView p={p} /> : <Missing kind="Power plant" />;
+  } else if (sel.kind === "port") {
+    const p = app.ports.rows.find((r) => r.id === sel.id);
+    body = p ? <PortView p={p} /> : <Missing kind="Port" />;
+  } else if (sel.kind === "volcano") {
+    const v = app.volcanoes.rows.find((r) => r.id === sel.id);
+    body = v ? <VolcanoView v={v} /> : <Missing kind="Volcano" />;
   } else if (sel.kind === "country") {
     body = <CountryView iso3={sel.iso3} name={sel.name} />;
   }
@@ -318,6 +327,62 @@ function AirportView({ a }: { a: Airport }) {
       </div>
       <button className="link-btn" onClick={() => app.requestFlyTo(a.lat, a.lon)}>Focus on globe</button>
       <p className="muted-note">OurAirports · public domain</p>
+    </>
+  );
+}
+
+function PowerPlantView({ p }: { p: PowerPlant }) {
+  const app = useApp();
+  return (
+    <>
+      <div className="entity-title">{p.name}</div>
+      <div className="entity-sub">Power plant · {p.fuel}</div>
+      <div className="field-grid">
+        <Field label="Fuel" value={p.fuel} />
+        <Field label="Capacity" value={`${p.mw.toLocaleString()} MW`} />
+        <Field label="Country" value={p.country} />
+        <Field label="Position" value={coord(p.lat, p.lon)} />
+      </div>
+      <button className="link-btn" onClick={() => app.requestFlyTo(p.lat, p.lon)}>Focus on globe</button>
+      <p className="muted-note">WRI Global Power Plant Database · CC BY 4.0</p>
+    </>
+  );
+}
+
+function PortView({ p }: { p: Port }) {
+  const app = useApp();
+  const size = p.size ? { xs: "very small", s: "small", m: "medium", l: "large" }[p.size] : undefined;
+  return (
+    <>
+      <div className="entity-title">{p.name}</div>
+      <div className="entity-sub">Port{size ? ` · ${size}` : ""}</div>
+      <div className="field-grid">
+        <Field label="Country" value={p.country} />
+        <Field label="Harbor size" value={size} />
+        <Field label="Harbor type" value={p.type} />
+        <Field label="Position" value={coord(p.lat, p.lon)} />
+      </div>
+      <button className="link-btn" onClick={() => app.requestFlyTo(p.lat, p.lon)}>Focus on globe</button>
+      <p className="muted-note">NGA World Port Index · public domain</p>
+    </>
+  );
+}
+
+function VolcanoView({ v }: { v: Volcano }) {
+  const app = useApp();
+  return (
+    <>
+      <div className="entity-title">{v.name}</div>
+      <div className="entity-sub">Volcano{v.type ? ` · ${v.type}` : ""}</div>
+      <div className="field-grid">
+        <Field label="Type" value={v.type} />
+        <Field label="Elevation" value={v.elevation != null ? `${v.elevation.toLocaleString()} m` : undefined} />
+        <Field label="Last eruption" value={v.lastEruption != null ? String(v.lastEruption) : undefined} />
+        <Field label="Country" value={v.country} />
+        <Field label="Position" value={coord(v.lat, v.lon)} />
+      </div>
+      <button className="link-btn" onClick={() => app.requestFlyTo(v.lat, v.lon)}>Focus on globe</button>
+      <p className="muted-note">Smithsonian Global Volcanism Program</p>
     </>
   );
 }
