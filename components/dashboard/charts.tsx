@@ -143,31 +143,74 @@ export function Bars({ items, max, unit, tone = "accent" }: { items: { label: st
   );
 }
 
-/** Relationship network — nodes on a ring, edges as chords, size by degree. */
-export function Network({ nodes, edges, size = 340 }: {
-  nodes: { id: string; label: string; weight: number }[]; edges: [number, number][]; size?: number;
+/** Entity-type → node colour. Drives both the graph and its legend. */
+const KIND_COLOR: Record<string, string> = {
+  person: "#65f6c7", org: "#54c7ff", organization: "#54c7ff", company: "#54c7ff",
+  country: "#ffae45", place: "#ffae45", event: "#ff9db1", signal: "#b18cff",
+};
+const kindColor = (k?: string) => KIND_COLOR[(k || "").toLowerCase()] || "#8aa0b6";
+
+export interface NetEdge { a: number; b: number; w?: number; tone?: "pos" | "neg"; }
+
+/**
+ * Relationship network — nodes on a ring (grouped by kind so structure reads),
+ * edges as chords weighted/coloured by strength & sign, size by degree. Hover
+ * an entity to trace only its links. Serves both the real entity graph and the
+ * signal-dependency graph (tone = correlation sign).
+ */
+export function Network({ nodes, edges, size = 360, legend }: {
+  nodes: { id: string; label: string; weight: number; kind?: string }[];
+  edges: NetEdge[]; size?: number; legend?: boolean;
 }) {
-  const c = size / 2, r = c - 40;
+  const [hover, setHover] = useState<number | null>(null);
+  if (nodes.length === 0) return <div className="obs-empty small">no graph data</div>;
+  const c = size / 2, r = c - 48;
   const maxW = Math.max(1, ...nodes.map((n) => n.weight));
+  const maxE = Math.max(1, ...edges.map((e) => e.w ?? 1));
+  // Ring order: cluster same-kind nodes together, strongest first within a kind.
+  const order = nodes.map((_, i) => i).sort((i, j) => {
+    const ki = nodes[i].kind || "", kj = nodes[j].kind || "";
+    return ki === kj ? nodes[j].weight - nodes[i].weight : ki < kj ? -1 : 1;
+  });
+  const slot = new Map<number, number>(); order.forEach((n, i) => slot.set(n, i));
   const pos = nodes.map((_, i) => {
-    const a = (Math.PI * 2 * i) / nodes.length - Math.PI / 2;
+    const a = (Math.PI * 2 * (slot.get(i) ?? i)) / nodes.length - Math.PI / 2;
     return [c + r * Math.cos(a), c + r * Math.sin(a)];
   });
-  const [hover, setHover] = useState<number | null>(null);
+  const neighbours = new Set<number>();
+  if (hover != null) for (const e of edges) { if (e.a === hover) neighbours.add(e.b); if (e.b === hover) neighbours.add(e.a); }
+  const kinds = [...new Set(nodes.map((n) => n.kind).filter(Boolean))] as string[];
   return (
-    <svg className="chart net" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Entity network">
-      {edges.map(([a, b], i) => (
-        <line key={i} x1={pos[a][0]} y1={pos[a][1]} x2={pos[b][0]} y2={pos[b][1]}
-          className={`edge ${hover != null && (hover === a || hover === b) ? "hot" : ""}`} />
-      ))}
-      {nodes.map((n, i) => (
-        <g key={n.id} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
-          <circle cx={pos[i][0]} cy={pos[i][1]} r={4 + (n.weight / maxW) * 8} className={`node ${hover === i ? "hot" : ""}`} />
-          {(hover === i || n.weight / maxW > 0.55) && (
-            <text x={pos[i][0]} y={pos[i][1] - 10} className="node-lbl" textAnchor="middle">{n.label}</text>
-          )}
-        </g>
-      ))}
-    </svg>
+    <div className="net-wrap">
+      <svg className="chart net" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Network graph">
+        {edges.map((e, i) => {
+          const hot = hover != null && (e.a === hover || e.b === hover);
+          const dim = hover != null && !hot;
+          const rgb = e.tone === "pos" ? "101,246,199" : e.tone === "neg" ? "255,90,98" : "170,190,210";
+          const base = e.tone ? 0.16 + 0.62 * ((e.w ?? 1) / maxE) : 0.12;
+          return (
+            <line key={i} x1={pos[e.a][0]} y1={pos[e.a][1]} x2={pos[e.b][0]} y2={pos[e.b][1]}
+              style={{ stroke: `rgba(${rgb},${dim ? 0.04 : hot ? 0.7 : base})`, strokeWidth: (hot ? 1.6 : 0.6) + ((e.w ?? 1) / maxE) * 2.2 }} />
+          );
+        })}
+        {nodes.map((n, i) => {
+          const active = hover == null || hover === i || neighbours.has(i);
+          return (
+            <g key={n.id} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} style={{ cursor: "pointer" }}>
+              <circle cx={pos[i][0]} cy={pos[i][1]} r={4 + (n.weight / maxW) * 9}
+                style={{ fill: kindColor(n.kind), opacity: active ? 1 : 0.25, stroke: "var(--bg)", strokeWidth: 1.5 }} />
+              {(hover === i || neighbours.has(i) || (hover == null && n.weight / maxW > 0.62)) && (
+                <text x={pos[i][0]} y={pos[i][1] - 10} className="node-lbl" textAnchor="middle" style={{ opacity: active ? 1 : 0.3 }}>{n.label}</text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {legend && kinds.length > 0 && (
+        <div className="net-legend">
+          {kinds.map((k) => <span key={k}><i style={{ background: kindColor(k) }} />{k}</span>)}
+        </div>
+      )}
+    </div>
   );
 }

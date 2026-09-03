@@ -116,6 +116,10 @@ export interface DashPayload {
     organizations: { name: string; mentions: number; country?: string }[];
     connected: { name: string; degree?: number }[];
   };
+  graph?: {
+    nodes: { id: string; name: string; kind: string; degree: number; country?: string }[];
+    edges: { a: number; b: number; type: string }[];
+  };
   cyber: { total: number; kev: number; topVendors: { vendor: string; count: number }[] };
   sanctions: { total: number; topAuthorities: { authority: string; count: number }[] };
   spacePowers: { country: string; count: number }[];

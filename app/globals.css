@@ -813,3 +813,21 @@ select, input.full, .observatory input[type=text] { background: rgba(255,255,255
 select { cursor: pointer; }
 input.full { width: 100%; margin-bottom: 8px; box-sizing: border-box; }
 .observatory select.full { width: 100%; margin-bottom: 8px; }
+
+/* N-way compare picker + best-in-row highlight */
+.cmp-pick.wrap { flex-wrap: wrap; }
+.cmp-slot { display: inline-flex; align-items: center; gap: 1px; border: 1px solid var(--line-strong); border-radius: 7px; padding-right: 3px; }
+.cmp-slot select { border: none; background: transparent; }
+.cmp-x { background: none; border: none; color: var(--muted-2); font-size: 15px; line-height: 1; cursor: pointer; padding: 0 3px; }
+.cmp-x:hover { color: var(--critical); }
+.cmp-add { background: rgba(255,255,255,0.03); border: 1px dashed var(--line-strong); color: var(--muted); border-radius: 7px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.cmp-add:hover { color: var(--accent); border-color: rgba(101,246,199,0.42); }
+.cell-best { color: var(--accent); font-weight: 700; }
+.tbl-sep td { color: var(--muted-2); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; padding-top: 8px; }
+
+/* Network graph legend + correlation-sign swatches */
+.net-wrap { display: flex; flex-direction: column; align-items: center; }
+.net-legend { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 6px; font: 600 10px var(--mono); color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.net-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.net-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.k-pos { color: var(--accent); } .k-neg { color: var(--critical); }

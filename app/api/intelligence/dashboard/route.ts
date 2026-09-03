@@ -84,16 +84,41 @@ function build(): unknown {
   // --- entities: influence (mentions) + relationship-graph centrality -------
   const persons = all("SELECT canonical_name n, mention_count m FROM persons ORDER BY mention_count DESC LIMIT 12");
   const orgs = all("SELECT canonical_name n, mention_count m, country_code cc FROM organizations ORDER BY mention_count DESC LIMIT 12");
+  const rels = all("SELECT from_id a, to_id b, type t FROM relationships");
   const degree = new Map<string, number>();
-  for (const r of all("SELECT from_id a, to_id b FROM relationships")) {
+  for (const r of rels) {
     for (const id of [str(r.a), str(r.b)]) if (id) degree.set(id, (degree.get(id) ?? 0) + 1);
   }
-  const nameById = new Map<string, string>();
-  for (const r of all("SELECT id, name FROM entities")) nameById.set(str(r.id), str(r.name));
+  const ent = new Map<string, { name: string; kind: string; country?: string }>();
+  for (const r of all("SELECT id, name, type, country_code cc FROM entities")) {
+    const id = str(r.id);
+    ent.set(id, { name: str(r.name) || id.replace(/^.*[:/]/, ""), kind: str(r.type) || id.split(":")[0] || "entity", country: str(r.cc) || undefined });
+  }
+  const nameOf = (id: string) => ent.get(id)?.name || id.replace(/^.*[:/]/, "");
   const connected = [...degree.entries()]
-    .map(([id, d]) => ({ name: nameById.get(id) || id.replace(/^.*[:/]/, ""), degree: d, mentions: 0 } as EntityRef))
+    .map(([id, d]) => ({ name: nameOf(id), degree: d, mentions: 0 } as EntityRef))
     .sort((a, b) => (b.degree ?? 0) - (a.degree ?? 0))
     .slice(0, 10);
+
+  // Real relationship subgraph: the most-connected N entities and the ACTUAL
+  // edges between them (deduped, undirected) — no synthesised topology.
+  const GRAPH_NODES = 32;
+  const topIds = [...degree.entries()].sort((a, b) => b[1] - a[1]).slice(0, GRAPH_NODES).map(([id]) => id);
+  const gIndex = new Map(topIds.map((id, i) => [id, i]));
+  const graphNodes = topIds.map((id) => {
+    const meta = ent.get(id);
+    return { id, name: nameOf(id), kind: meta?.kind || id.split(":")[0] || "entity", degree: degree.get(id) ?? 0, country: meta?.country };
+  });
+  const seenEdge = new Set<string>();
+  const graphEdges: { a: number; b: number; type: string }[] = [];
+  for (const r of rels) {
+    const a = gIndex.get(str(r.a)), b = gIndex.get(str(r.b));
+    if (a == null || b == null || a === b) continue;
+    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+    if (seenEdge.has(key)) continue;
+    seenEdge.add(key);
+    graphEdges.push({ a, b, type: str(r.t) });
+  }
   const personRefs: EntityRef[] = persons.map((p) => ({ name: str(p.n), mentions: num(p.m) }));
   const orgRefs: EntityRef[] = orgs.map((o) => ({ name: str(o.n), mentions: num(o.m), country: str(o.cc) || undefined }));
 
@@ -139,6 +164,7 @@ function build(): unknown {
         factors: s.factors,
       })),
     entities: { persons: personRefs, organizations: orgRefs, connected },
+    graph: { nodes: graphNodes, edges: graphEdges },
     cyber: { total: cyberTotal, kev: cyberKev, topVendors },
     sanctions: { total: sanctionsTotal, topAuthorities },
     spacePowers,

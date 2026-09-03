@@ -4,7 +4,8 @@ import { useApp, type DashInsight, type DashPayload, type DashScore } from "@/st
 import {
   QuadrantScatter, WeightBuilder, CorrelationHeatmap, DistributionPanel, OutlierBoard,
   RiskAdjusted, ExpectedImpact, CompoundRisk, RegionalRollup, CompareCountries,
-  SimilarCountries, EntityNetwork, ConcentrationPanel, DataTable, MethodPanel,
+  PercentileProfile, PeerBenchmark, SimilarCountries, EntityNetwork, SignalDependencyGraph,
+  EntityLeaderboard, OrgCountryFlows, ConcentrationPanel, DataTable, MethodPanel,
 } from "./features";
 
 type Persona = "all" | "political" | "finance" | "marketing";
@@ -89,6 +90,8 @@ export default function Observatory() {
       {tab === "compare" && (
         <div className="feat-grid">
           <CompareCountries data={data} />
+          <PercentileProfile data={data} />
+          <PeerBenchmark data={data} />
           <SimilarCountries data={data} />
         </div>
       )}
@@ -96,6 +99,9 @@ export default function Observatory() {
       {tab === "network" && (
         <div className="feat-grid">
           <EntityNetwork data={data} />
+          <SignalDependencyGraph data={data} />
+          <EntityLeaderboard data={data} />
+          <OrgCountryFlows data={data} />
           <ConcentrationPanel data={data} />
         </div>
       )}
