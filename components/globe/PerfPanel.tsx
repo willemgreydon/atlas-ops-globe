@@ -52,7 +52,7 @@ export default function PerfPanel() {
       <div className="perf-row">
         <span>FPS</span>
         <b style={{ color: fpsColor }}>{stats.fps}</b>
-        <span className="perf-dim">{stats.frameTimeMs} ms</span>
+        <span className="perf-dim">{stats.frameTimeMs} ms · {stats.displayFps}/s shown</span>
       </div>
       <div className="perf-row">
         <span>Quality</span>

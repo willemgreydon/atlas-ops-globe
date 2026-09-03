@@ -17,9 +17,11 @@
  */
 import {
   CallbackPositionProperty,
+  CallbackProperty,
   Cartesian3,
   CustomDataSource,
   Math as CMath,
+  Quaternion,
   type Entity,
   type Viewer,
 } from "cesium";
@@ -38,6 +40,11 @@ interface Track<T> {
   row: T;
   /** Smoothed rendered position (world), eased toward the sampled target. */
   render: Cartesian3;
+  /** Reused target scratch — the eased-toward point, recomputed each frame. */
+  target: Cartesian3;
+  /** Last sample + when it was taken, so position & orientation share one call. */
+  sample: Sample | null;
+  sampleAt: number;
   lastFrameMs: number;
   primed: boolean;
 }
@@ -55,6 +62,20 @@ export interface MovingLayerOptions<T extends { id: string }> {
   selection: (row: T) => NonNullable<Selection>;
   /** Optional: update graphics when a new observation arrives (e.g. rotation). */
   onUpdate?: (entity: Entity, row: T, sample: Sample) => void;
+  /**
+   * Optional per-frame model orientation, driven by the smoothed render
+   * position and the latest heading. When set, the entity gets an `orientation`
+   * property so a glTF model stands correctly on the globe (mission §85). Must
+   * write into and return `result` (a per-track scratch quaternion).
+   */
+  orient?: (position: Cartesian3, row: T, headingDeg: number | undefined, result: Quaternion) => Quaternion;
+  /**
+   * Camera distance (m) beyond which the model is distance-culled, so the
+   * orientation callback can skip the quaternion recompute and return the last
+   * value (mission §85). Cheap distance check replaces the full ENU solve for
+   * the thousands of entities whose model isn't currently drawn.
+   */
+  orientMaxDistanceM?: number;
   /** Snap (don't ease) if a correction exceeds this many metres — stale data. */
   snapThresholdM?: number;
   /** Smoothing time constant in seconds (smaller = snappier). */
@@ -113,22 +134,58 @@ export class MovingLayer<T extends { id: string }> {
     const start = initial
       ? Cartesian3.fromDegrees(initial.lon, initial.lat, initial.alt)
       : Cartesian3.fromDegrees(0, 0, 0);
-    const track: Track<T> = { entity: undefined as unknown as Entity, row, render: start.clone(), lastFrameMs: nowMs(), primed: false };
+    const track: Track<T> = {
+      entity: undefined as unknown as Entity,
+      row,
+      render: start.clone(),
+      target: new Cartesian3(),
+      sample: initial,
+      sampleAt: nowMs(),
+      lastFrameMs: nowMs(),
+      primed: false,
+    };
 
     const position = new CallbackPositionProperty(() => this.evaluate(track), false);
     const graphics = this.opts.build(row);
-    const entity = this.ds.entities.add({ ...graphics, position });
+    const options: Entity.ConstructorOptions = { ...graphics, position };
+    if (this.opts.orient) {
+      const q = new Quaternion();
+      const maxD = this.opts.orientMaxDistanceM;
+      options.orientation = new CallbackProperty(() => {
+        // Skip the ENU solve when the model is distance-culled — it isn't drawn.
+        if (maxD !== undefined && Cartesian3.distance(this.viewer.camera.positionWC, track.render) > maxD) {
+          return q;
+        }
+        const s = this.sampleNow(track);
+        return this.opts.orient!(track.render, track.row, s?.headingDeg, q);
+      }, false);
+    }
+    const entity = this.ds.entities.add(options);
     if (initial) this.opts.onUpdate?.(entity, row, initial);
     track.entity = entity;
     this.tracks.set(row.id, track);
     this.selectionMap.set(entity, this.opts.selection(row));
   }
 
+  /**
+   * Sample the track's target position at most once per rendered frame, shared
+   * between the position and orientation callbacks (which Cesium evaluates
+   * microseconds apart). Halves SGP4/dead-reckon work for entities that carry
+   * both, and removes a per-entity, per-frame allocation.
+   */
+  private sampleNow(track: Track<T>): Sample | null {
+    const t = nowMs();
+    if (t - track.sampleAt < 8) return track.sample; // same frame → reuse
+    track.sampleAt = t;
+    track.sample = this.opts.sample(track.row, Date.now());
+    return track.sample;
+  }
+
   /** Per-frame position: ease `render` toward the freshly sampled target. */
   private evaluate(track: Track<T>): Cartesian3 {
-    const s = this.opts.sample(track.row, Date.now());
+    const s = this.sampleNow(track);
     if (!s) return track.render;
-    const target = Cartesian3.fromDegrees(s.lon, s.lat, s.alt);
+    const target = Cartesian3.fromDegrees(s.lon, s.lat, s.alt, undefined, track.target);
     const t = nowMs();
     const dt = Math.min(0.25, Math.max(0, (t - track.lastFrameMs) / 1000));
     track.lastFrameMs = t;

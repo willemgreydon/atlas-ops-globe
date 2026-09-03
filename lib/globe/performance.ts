@@ -16,7 +16,11 @@ import {
 import { applyQuality } from "./scene";
 
 export interface PerfStats {
+  /** Render *capacity* — fps the current scene can sustain (headroom, not cadence). */
   fps: number;
+  /** Actual on-screen cadence; low while idle by design (request-driven rendering). */
+  displayFps: number;
+  /** True render cost of a frame in ms — the honest budget number. */
   frameTimeMs: number;
   /** The preset the governor is currently rendering at. */
   effectiveQuality: GlobeQuality;
@@ -46,13 +50,16 @@ export class GlobePerformanceManager {
   private ceiling: GlobeQuality;
   private effective: GlobeQuality;
   private auto = true;
-  private fps = 60;
+  private fps = 60; // smoothed *displayed* rate (wall-clock cadence) — for the HUD
+  private renderFps = 60; // smoothed render *capacity* (preRender→postRender) — drives auto-quality
+  private frameStart = 0;
   private lastFrame = 0;
   private startedAt = 0;
   private belowSince = 0;
   private aboveSince = 0;
   private cameraMoving = false;
   private listeners = new Set<Listener>();
+  private removePreRender?: () => void;
   private removePostRender?: () => void;
   private removeMoveStart?: () => void;
   private removeMoveEnd?: () => void;
@@ -70,15 +77,21 @@ export class GlobePerformanceManager {
     this.startedAt = now();
     this.lastFrame = now();
 
+    const onPreRender = () => { this.frameStart = now(); };
+    scene.preRender.addEventListener(onPreRender);
+    this.removePreRender = () => scene.preRender.removeEventListener(onPreRender);
+
     const onPostRender = () => {
       const t = now();
-      const dt = t - this.lastFrame;
+      const gap = t - this.lastFrame; // wall-clock cadence → displayed FPS
+      const cost = t - this.frameStart; // render's own cost → true budget
       this.lastFrame = t;
-      if (dt > 0 && dt < 1000) {
-        const inst = 1000 / dt;
-        // Exponential moving average — smooth but responsive.
-        this.fps = this.fps * 0.9 + inst * 0.1;
-      }
+      // Displayed FPS is the honest on-screen rate (low when idle — that's fine).
+      if (gap > 0 && gap < 2000) this.fps = this.fps * 0.9 + (1000 / gap) * 0.1;
+      // Auto-quality reacts to render COST, not cadence: under request-driven
+      // rendering the wall-clock gap includes idle time and would masquerade as a
+      // slow frame, needlessly degrading quality (mission §4).
+      if (cost > 0 && cost < 1000) this.renderFps = this.renderFps * 0.9 + (1000 / cost) * 0.1;
       if (t - this.startedAt > TARGET.warmupMs) this.evaluate(t);
       this.emit();
     };
@@ -99,7 +112,7 @@ export class GlobePerformanceManager {
     const idx = ladder.indexOf(this.effective);
     const ceilIdx = ladder.indexOf(this.ceiling);
 
-    if (this.fps < TARGET.degradeBelow) {
+    if (this.renderFps < TARGET.degradeBelow) {
       this.aboveSince = 0;
       if (!this.belowSince) this.belowSince = t;
       // Can we drop a step? (higher index = lower quality)
@@ -107,7 +120,7 @@ export class GlobePerformanceManager {
         this.setEffective(ladder[idx + 1]);
         this.belowSince = 0;
       }
-    } else if (this.fps > TARGET.recoverAbove) {
+    } else if (this.renderFps > TARGET.recoverAbove) {
       this.belowSince = 0;
       if (!this.aboveSince) this.aboveSince = t;
       // Recover toward the ceiling (lower index), but never above it.
@@ -148,8 +161,9 @@ export class GlobePerformanceManager {
 
   getStats(): PerfStats {
     return {
-      fps: Math.round(this.fps),
-      frameTimeMs: this.fps > 0 ? +(1000 / this.fps).toFixed(1) : 0,
+      fps: Math.round(this.renderFps),
+      displayFps: Math.round(this.fps),
+      frameTimeMs: this.renderFps > 0 ? +(1000 / this.renderFps).toFixed(1) : 0,
       effectiveQuality: this.effective,
       ceiling: this.ceiling,
       auto: this.auto,
@@ -175,6 +189,7 @@ export class GlobePerformanceManager {
 
   dispose(): void {
     this.disposed = true;
+    this.removePreRender?.();
     this.removePostRender?.();
     this.removeMoveStart?.();
     this.removeMoveEnd?.();

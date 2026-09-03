@@ -10,19 +10,50 @@
 import {
   Color,
   ConstantProperty,
+  DistanceDisplayCondition,
   Math as CMath,
   NearFarScalar,
   VerticalOrigin,
+  type Cartesian3,
   type Entity,
+  type Quaternion,
   type Viewer,
 } from "cesium";
 import type { Selection, SatelliteRow, VesselRow } from "@/stores/app-store";
 import type { AircraftState } from "@/types/domain";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import { MovingLayer, deadReckon, secondsSince } from "./motion";
+import { surfaceQuaternion } from "./orient";
+import { modelUrl } from "@/lib/globe/models/registry";
+import { classifySatellite } from "@/lib/globe/models/classify";
 
 type SelMap = WeakMap<Entity, NonNullable<Selection>>;
 const KN_TO_MS = 0.514444;
+
+/**
+ * Camera-to-entity distances (m) inside which the procedural glTF model replaces
+ * the flat point/billboard (mission §85). Beyond them the cheap marker carries
+ * the dense far view; within them you get a real 3D silhouette. A generous
+ * satellite bubble lets tracked GEO birds show their dish once the camera flies in.
+ */
+const SAT_MODEL_DISTANCE = 4.0e6;
+const AIRCRAFT_MODEL_DISTANCE = 8.0e5;
+const VESSEL_MODEL_DISTANCE = 5.0e5;
+
+/** glTF model graphics shown only within `near` metres of the camera. */
+function nearModel(uri: string, near: number, minimumPixelSize: number) {
+  return {
+    uri,
+    scale: 1,
+    minimumPixelSize,
+    maximumScale: 30_000,
+    distanceDisplayCondition: new DistanceDisplayCondition(0, near),
+  };
+}
+
+/** Stand any body-frame model up on the globe from the smoothed position + heading. */
+const orientToSurface = (pos: Cartesian3, _row: unknown, hdg: number | undefined, result: Quaternion) =>
+  surfaceQuaternion(pos, hdg, result);
 
 /**
  * Depth-test near-bubble for data markers (mission §65 §66). Inside this camera
@@ -60,8 +91,12 @@ export function createAircraftLayer(viewer: Viewer, sel: SelMap, sprite: HTMLCan
         verticalOrigin: VerticalOrigin.CENTER,
         scaleByDistance: new NearFarScalar(1.0e6, 1.2, 1.5e7, 0.55),
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+        distanceDisplayCondition: new DistanceDisplayCondition(AIRCRAFT_MODEL_DISTANCE, Number.MAX_VALUE),
       },
+      model: nearModel(modelUrl("aircraft-airliner"), AIRCRAFT_MODEL_DISTANCE, 48),
     }),
+    orient: orientToSurface,
+    orientMaxDistanceM: AIRCRAFT_MODEL_DISTANCE,
     onUpdate: (ent, _a, s) => {
       if (ent.billboard && s.headingDeg != null) {
         ent.billboard.rotation = new ConstantProperty(-CMath.toRadians(s.headingDeg));
@@ -92,8 +127,12 @@ export function createVesselLayer(viewer: Viewer, sel: SelMap): MovingLayer<Vess
         outlineWidth: 1,
         scaleByDistance: new NearFarScalar(2.0e6, 1.1, 2.0e7, 0.5),
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+        distanceDisplayCondition: new DistanceDisplayCondition(VESSEL_MODEL_DISTANCE, Number.MAX_VALUE),
       },
+      model: nearModel(modelUrl("vessel-cargo"), VESSEL_MODEL_DISTANCE, 52),
     }),
+    orient: orientToSurface,
+    orientMaxDistanceM: VESSEL_MODEL_DISTANCE,
     selection: (v) => ({ kind: "vessel", id: v.id }),
   });
 }
@@ -106,7 +145,8 @@ export function createSatelliteLayer(viewer: Viewer, sel: SelMap, sat: Sgp4): Mo
   // Per-satellite SGP4 record + throttled propagation cache (recompute ≤ 4 Hz;
   // the render layer's easing interpolates between propagations).
   const recs = new Map<string, SatRec | null>();
-  const cache = new Map<string, { at: number; lon: number; lat: number; alt: number } | null>();
+  const cache = new Map<string, { at: number; lon: number; lat: number; alt: number }>();
+  const scratchDate = new Date(); // reused per propagation — satellite.js never retains it
 
   const recFor = (s: SatelliteRow): SatRec | null => {
     if (recs.has(s.id)) return recs.get(s.id)!;
@@ -126,21 +166,24 @@ export function createSatelliteLayer(viewer: Viewer, sel: SelMap, sat: Sgp4): Mo
     snapThresholdM: 500_000,
     smoothingTau: 0.35,
     sample: (s, now) => {
+      // ≤4 Hz propagation; on a cache hit return the stored object directly so a
+      // dense catalogue costs no per-frame allocation (the render layer eases
+      // between propagations).
       const cached = cache.get(s.id);
-      if (cached && now - cached.at < 250) return { lon: cached.lon, lat: cached.lat, alt: cached.alt };
+      if (cached && now - cached.at < 250) return cached;
       const rec = recFor(s);
       if (!rec) return null;
-      const date = new Date(now);
-      const pv = sat.propagate(rec, date);
+      scratchDate.setTime(now);
+      const pv = sat.propagate(rec, scratchDate);
       if (!pv || typeof pv.position === "boolean" || !pv.position) return null;
-      const gmst = sat.gstime(date);
+      const gmst = sat.gstime(scratchDate);
       const geo = sat.eciToGeodetic(pv.position, gmst);
       const lon = sat.degreesLong(geo.longitude);
       const lat = sat.degreesLat(geo.latitude);
       if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
       const out = { at: now, lon, lat, alt: geo.height * 1000 };
       cache.set(s.id, out);
-      return { lon, lat, alt: out.alt };
+      return out;
     },
     build: (s) => ({
       point: {
@@ -150,8 +193,12 @@ export function createSatelliteLayer(viewer: Viewer, sel: SelMap, sat: Sgp4): Mo
         outlineWidth: 1,
         scaleByDistance: new NearFarScalar(2.0e6, 1.4, 6.0e7, 0.5),
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+        distanceDisplayCondition: new DistanceDisplayCondition(SAT_MODEL_DISTANCE, Number.MAX_VALUE),
       },
+      model: nearModel(modelUrl(classifySatellite(s)), SAT_MODEL_DISTANCE, 56),
     }),
+    orient: orientToSurface,
+    orientMaxDistanceM: SAT_MODEL_DISTANCE,
     selection: (s) => ({ kind: "satellite", id: s.id }),
   });
 }
