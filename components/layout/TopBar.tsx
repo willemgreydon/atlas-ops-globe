@@ -62,6 +62,10 @@ export default function TopBar() {
         ))}
       </nav>
       <div className="topbar-right">
+        <div className="view-toggle" role="group" aria-label="View">
+          <button className={app.view === "globe" ? "active" : ""} onClick={() => app.setView("globe")} aria-pressed={app.view === "globe"}>Globe</button>
+          <button className={app.view === "dashboard" ? "active" : ""} onClick={() => app.setView("dashboard")} aria-pressed={app.view === "dashboard"}>Observatory</button>
+        </div>
         <button className="search-trigger" onClick={() => app.setSearchOpen(true)} aria-label="Search (Cmd+K)">
           <Search size={13} /> Search
           <kbd>⌘K</kbd>

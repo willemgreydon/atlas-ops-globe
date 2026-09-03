@@ -79,6 +79,50 @@ export interface City {
   pop: number;
 }
 
+/** Which top-level view is shown: the 3D globe, or the analytics dashboard. */
+export type ViewId = "globe" | "dashboard";
+
+/** One country's cross-domain composite scores (from /api/intelligence/dashboard). */
+export interface DashScore {
+  iso2: string; name: string; region?: string;
+  risk: number; opportunity: number; momentum: number; stability: number;
+  conflict: number; disaster: number; severeEvents: number; news: number;
+  reachPop: number; cities: number; space: number;
+  factors: { conflict: number; disaster: number; severity: number; attention: number; reach: number; economy: number };
+}
+
+/** One ranked, persona-framed insight from the analytics engine. */
+export interface DashInsight {
+  id: string;
+  persona: "political" | "finance" | "marketing";
+  kind: "risk" | "opportunity" | "synergy" | "signal";
+  title: string;
+  detail: string;
+  score: number;
+  metrics: { label: string; value: string }[];
+}
+
+/** Full analytics payload backing the observability dashboard. */
+export interface DashPayload {
+  generatedAt: string;
+  degraded?: boolean;
+  status?: string;
+  source?: string;
+  counts: Record<string, number>;
+  scores: DashScore[];
+  entities: {
+    persons: { name: string; mentions: number }[];
+    organizations: { name: string; mentions: number; country?: string }[];
+    connected: { name: string; degree?: number }[];
+  };
+  cyber: { total: number; kev: number; topVendors: { vendor: string; count: number }[] };
+  sanctions: { total: number; topAuthorities: { authority: string; count: number }[] };
+  spacePowers: { country: string; count: number }[];
+  correlations: { label: string; r: number }[];
+  insights: DashInsight[];
+  markets: { symbol: string; name: string; changePct: number; assetClass: string }[];
+}
+
 /** Air-quality point (Open-Meteo, US AQI) sampled at a world city. */
 export interface AirQualityRow {
   id: string;
@@ -200,6 +244,11 @@ interface AppState {
    */
   dock: MobileDock;
   setDock: (d: MobileDock) => void;
+  /** Top-level view: the 3D globe or the analytics dashboard. */
+  view: ViewId;
+  setView: (v: ViewId) => void;
+  /** Cross-domain observability analytics (loaded when the dashboard is open). */
+  dashboard: { data: DashPayload | null; loading: boolean; error?: string };
   aircraft: Feed<AircraftState>;
   events: Feed<WorldEvent>;
   news: Feed<NewsItem>;
@@ -419,8 +468,29 @@ function useStaticJson<T>(url: string, source: string, active: boolean): Feed<T>
   return state;
 }
 
+/** Analytics dashboard payload — fetched when the dashboard view is open, then
+ *  refreshed on a slow cadence (the server caches for 5 min to bound reads). */
+function useDashboard(active: boolean): { data: DashPayload | null; loading: boolean; error?: string } {
+  const [state, setState] = useState<{ data: DashPayload | null; loading: boolean; error?: string }>({ data: null, loading: false });
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    const load = () => {
+      setState((s) => ({ ...s, loading: true }));
+      fetch("/api/intelligence/dashboard", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data: DashPayload) => { if (!cancelled) setState({ data, loading: false }); })
+        .catch((err) => { if (!cancelled) setState((s) => ({ data: s.data, loading: false, error: String(err) })); });
+    };
+    const stop = pollWhileVisible(load, 5 * 60_000);
+    return () => { cancelled = true; stop(); };
+  }, [active]);
+  return state;
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<ModeId>("global");
+  const [view, setView] = useState<ViewId>("globe");
   const [layers, setLayers] = useState<Record<LayerId, boolean>>(() => defaultLayerVisibility("global"));
   const [selection, setSelection] = useState<Selection>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -487,11 +557,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const cities = useStaticJson<City>("/data/cities.json", "GeoNames", layers.cities);
   const airquality = useFeed<AirQualityRow>("/api/intelligence/airquality", POLL_MS.satellites, layers.airquality);
   const vault = useVaultSnapshot();
+  const dashboard = useDashboard(view === "dashboard");
 
   const value = useMemo<AppState>(
     () => ({
       mode,
       setMode,
+      view,
+      setView,
+      dashboard,
       layers,
       toggleLayer,
       selection,
@@ -534,7 +608,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       terrain,
       setTerrain,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, powerplants, ports, volcanoes, cities, airquality, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
+    [mode, setMode, view, dashboard, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, powerplants, ports, volcanoes, cities, airquality, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
