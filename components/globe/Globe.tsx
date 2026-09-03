@@ -10,6 +10,7 @@ import {
   CustomDataSource,
   GeoJsonDataSource,
   Ion,
+  LabelStyle,
   Math as CMath,
   OpenStreetMapImageryProvider,
   ScreenSpaceEventHandler,
@@ -22,7 +23,7 @@ import {
 import { ImageryLayer, Viewer, type CesiumComponentRef } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { loadSgp4 } from "@/lib/sgp4-client";
-import { useApp, type Airport, type AirQualityRow, type PowerPlant, type Port, type Volcano, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type Airport, type AirQualityRow, type City, type PowerPlant, type Port, type Volcano, type SatelliteRow, type Selection, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { LAYER_BY_ID } from "@/lib/config/layers";
 import type { AircraftState, NewsItem, Severity, WorldEvent } from "@/types/domain";
 import { configureScene } from "@/lib/globe/scene";
@@ -564,6 +565,25 @@ export default function Globe() {
     return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); volcanoesLayer.current = null; };
   }, [ready, app.layers.volcanoes]);
 
+  // --- cities layer (static GeoNames gazetteer; default-on, visible from orbit
+  //     so no populated region — Moscow, Beijing, Kinshasa — is ever blank) ----
+  const citiesLayer = useRef<StaticLayer<City> | null>(null);
+  const cityRows = useRef<City[]>([]);
+  useEffect(() => {
+    cityRows.current = app.cities.rows;
+    citiesLayer.current?.update(app.cities.rows);
+  }, [app.cities.rows]);
+  useEffect(() => {
+    const viewer = ref.current?.cesiumElement;
+    if (!ready || !viewer || !app.layers.cities) return;
+    const layer = createCitiesLayer(viewer);
+    layer.mount();
+    layer.update(cityRows.current);
+    citiesLayer.current = layer;
+    lodRef.current?.register("cities", layer.ds);
+    return () => { lodRef.current?.unregister(layer.ds); layer.dispose(); citiesLayer.current = null; };
+  }, [ready, app.layers.cities]);
+
   // --- air-quality layer (Open-Meteo US AQI at world cities) ----------------
   const airQualityLayer = useRef<StaticLayer<AirQualityRow> | null>(null);
   const airQualityRows = useRef<AirQualityRow[]>([]);
@@ -619,7 +639,7 @@ export default function Globe() {
     aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
     conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
     airports: app.airports.rows, airquality: app.airquality.rows,
-    powerplants: app.powerplants.rows, ports: app.ports.rows, volcanoes: app.volcanoes.rows,
+    powerplants: app.powerplants.rows, ports: app.ports.rows, volcanoes: app.volcanoes.rows, cities: app.cities.rows,
   });
   useEffect(() => {
     // Deliberate latest-value ref: the focus/hover effects read these rows to
@@ -632,9 +652,9 @@ export default function Globe() {
       aircraft: app.aircraft.rows, vessels: app.vessels.rows, events: app.events.rows,
       conflict: app.conflict.rows, news: app.news.rows, weather: app.weather.rows, satellites: app.satellites.rows,
       airports: app.airports.rows, airquality: app.airquality.rows,
-      powerplants: app.powerplants.rows, ports: app.ports.rows, volcanoes: app.volcanoes.rows,
+      powerplants: app.powerplants.rows, ports: app.ports.rows, volcanoes: app.volcanoes.rows, cities: app.cities.rows,
     };
-  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows, app.airports.rows, app.airquality.rows, app.powerplants.rows, app.ports.rows, app.volcanoes.rows]);
+  }, [app.aircraft.rows, app.vessels.rows, app.events.rows, app.conflict.rows, app.news.rows, app.weather.rows, app.satellites.rows, app.airports.rows, app.airquality.rows, app.powerplants.rows, app.ports.rows, app.volcanoes.rows, app.cities.rows]);
 
   // --- focus mode: follow (moving) or fly-to (static) the selection ---------
   // Moving objects (aircraft/vessel/satellite) are *tracked* (§19): the camera
@@ -764,6 +784,13 @@ export default function Globe() {
         orbitTrail.current?.hide();
         break;
       }
+      case "city": {
+        untrack();
+        const c = feeds.cities.find((r) => r.id === sel.id);
+        if (c) { cam.flyToPoint(c.lon, c.lat, 250_000); focus?.showAt(Cartesian3.fromDegrees(c.lon, c.lat, 0), { reducedMotion: rm }); }
+        orbitTrail.current?.hide();
+        break;
+      }
       default:
         untrack();
         orbitTrail.current?.hide();
@@ -854,6 +881,7 @@ interface HoverFeeds {
   powerplants: PowerPlant[];
   ports: Port[];
   volcanoes: Volcano[];
+  cities: City[];
 }
 
 /** Resolve a picked scene object into a hover tooltip payload (or null). */
@@ -921,6 +949,10 @@ function hoverForSelection(sel: NonNullable<Selection>, feeds: HoverFeeds, x: nu
     case "volcano": {
       const v = feeds.volcanoes.find((r) => r.id === sel.id);
       return v ? { x, y, kind: "VOLCANO", title: v.name, subtitle: join([v.type, v.lastEruption != null ? `last ${v.lastEruption}` : undefined]), color: LAYER_BY_ID.volcanoes.color } : null;
+    }
+    case "city": {
+      const c = feeds.cities.find((r) => r.id === sel.id);
+      return c ? { x, y, kind: "CITY", title: c.name, subtitle: join([c.country, c.pop ? `${(c.pop / 1e6).toFixed(c.pop >= 1e6 ? 1 : 2)}M people` : undefined]), color: LAYER_BY_ID.cities.color } : null;
     }
     default:
       return null;
@@ -1161,6 +1193,52 @@ function volcanoGraphics(v: Volcano): CesiumEntity.ConstructorOptions {
       scaleByDistance: new NearFarScalar(3.0e6, 1.0, 2.0e7, recent ? 0.6 : 0.35),
     },
   };
+}
+
+function createCitiesLayer(viewer: CesiumViewer): StaticLayer<City> {
+  return new StaticLayer<City>(viewer, selectionMap, {
+    name: "cities",
+    position: (c) => Cartesian3.fromDegrees(c.lon, c.lat, 0),
+    build: (c) => cityGraphics(c),
+    selection: (c) => ({ kind: "city", id: c.id }),
+  });
+}
+
+function cityGraphics(c: City): CesiumEntity.ConstructorOptions {
+  // Bigger, brighter dot for bigger cities; small towns fade out at distance so
+  // the whole layer reads as a population map from orbit rather than a smear.
+  const size = c.pop >= 5e6 ? 7 : c.pop >= 1e6 ? 6 : c.pop >= 3e5 ? 5 : 4;
+  const alpha = c.pop >= 1e6 ? 0.95 : c.pop >= 3e5 ? 0.8 : 0.6;
+  const color = Color.fromCssColorString(LAYER_BY_ID.cities.color);
+  const g: CesiumEntity.ConstructorOptions = {
+    point: {
+      pixelSize: size,
+      color: color.withAlpha(alpha),
+      outlineColor: Color.BLACK.withAlpha(0.4),
+      outlineWidth: 1,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+      scaleByDistance: new NearFarScalar(2.0e6, 1.0, 4.0e7, c.pop >= 1e6 ? 0.5 : 0.2),
+    },
+  };
+  // Name the major cities so the globe is legible from orbit (Moscow, Beijing,
+  // Lagos, Sydney…). Smaller towns stay unlabelled to avoid a wall of text.
+  if (c.pop >= 2e6) {
+    g.label = {
+      text: c.name,
+      font: "600 12px Inter, sans-serif",
+      fillColor: Color.WHITE,
+      outlineColor: Color.fromCssColorString("#05070a").withAlpha(0.9),
+      outlineWidth: 2,
+      style: LabelStyle.FILL_AND_OUTLINE,
+      verticalOrigin: VerticalOrigin.BOTTOM,
+      pixelOffset: new Cartesian2(0, -8),
+      disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
+      // Full size when close, fading to nothing far out so orbit stays readable.
+      scaleByDistance: new NearFarScalar(3.0e6, 1.0, 3.0e7, 0.0),
+    };
+  }
+  return g;
 }
 
 // US AQI colour scale (good → hazardous).

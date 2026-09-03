@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { loadSgp4, subpoint } from "@/lib/sgp4-client";
-import { useApp, type Airport, type AirQualityRow, type PowerPlant, type Port, type Volcano, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
+import { useApp, type Airport, type AirQualityRow, type City, type PowerPlant, type Port, type Volcano, type SatelliteRow, type VesselRow, type WeatherRow } from "@/stores/app-store";
 import { operatorFromCallsign } from "@/data/airlines-icao";
 import StatusBadge from "@/components/common/StatusBadge";
 import { safeHttpUrl } from "@/lib/safe-url";
@@ -62,6 +62,9 @@ export default function Inspector() {
   } else if (sel.kind === "volcano") {
     const v = app.volcanoes.rows.find((r) => r.id === sel.id);
     body = v ? <VolcanoView v={v} /> : <Missing kind="Volcano" />;
+  } else if (sel.kind === "city") {
+    const c = app.cities.rows.find((r) => r.id === sel.id);
+    body = c ? <CityView c={c} /> : <Missing kind="City" />;
   } else if (sel.kind === "country") {
     body = <CountryView iso3={sel.iso3} name={sel.name} />;
   }
@@ -383,6 +386,23 @@ function VolcanoView({ v }: { v: Volcano }) {
       </div>
       <button className="link-btn" onClick={() => app.requestFlyTo(v.lat, v.lon)}>Focus on globe</button>
       <p className="muted-note">Smithsonian Global Volcanism Program</p>
+    </>
+  );
+}
+
+function CityView({ c }: { c: City }) {
+  const app = useApp();
+  return (
+    <>
+      <div className="entity-title">{c.name}</div>
+      <div className="entity-sub">City{c.country ? ` · ${c.country}` : ""}</div>
+      <div className="field-grid">
+        <Field label="Population" value={c.pop ? c.pop.toLocaleString() : undefined} />
+        <Field label="Country" value={c.country} />
+        <Field label="Position" value={coord(c.lat, c.lon)} />
+      </div>
+      <button className="link-btn" onClick={() => app.requestFlyTo(c.lat, c.lon)}>Focus on globe</button>
+      <p className="muted-note">GeoNames · CC BY 4.0</p>
     </>
   );
 }

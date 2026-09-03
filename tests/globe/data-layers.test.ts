@@ -41,6 +41,26 @@ describe("ports asset (NGA WPI)", () => {
   });
 });
 
+describe("cities asset (GeoNames)", () => {
+  const rows = loadJson<{ id: string; name: string; lat: number; lon: number; pop: number }[]>("cities.json");
+  it("is a large, well-formed set covering every populated region", () => {
+    expect(rows.length).toBeGreaterThan(20_000);
+    expect(finiteCoords(rows)).toBe(true);
+    expect(rows.every((r) => r.id && r.name)).toBe(true);
+  });
+  it("is dense over China, Russia, Central Africa and Australia", () => {
+    expect(rows.filter((r) => inBox(r, 18, 54, 73, 135)).length).toBeGreaterThan(2_000); // China
+    expect(rows.filter((r) => inBox(r, 41, 78, 30, 180)).length).toBeGreaterThan(800); // Russia
+    expect(rows.filter((r) => inBox(r, -15, 15, 10, 40)).length).toBeGreaterThan(400); // Central Africa
+    expect(rows.filter((r) => inBox(r, -45, -10, 112, 154)).length).toBeGreaterThan(100); // Australia
+  });
+  it("includes Moscow", () => {
+    const moscow = rows.find((r) => r.name === "Moscow" && inBox(r, 55, 56, 37, 38));
+    expect(moscow).toBeTruthy();
+    expect(moscow!.pop).toBeGreaterThan(1_000_000);
+  });
+});
+
 describe("volcanoes asset (Smithsonian GVP)", () => {
   const rows = loadJson<{ id: string; name: string; lat: number; lon: number }[]>("volcanoes.json");
   it("is the full Holocene list", () => {

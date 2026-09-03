@@ -7,6 +7,7 @@ import type { EventKind } from "@/types/domain";
  */
 export type LayerId =
   | "countries"
+  | "cities"
   | "aircraft"
   | "airports"
   | "powerplants"
@@ -30,7 +31,7 @@ export interface LayerDef {
   color: string;
   status: "active" | "planned";
   /** Which data feed drives this layer, for the fetch scheduler. */
-  feed?: "aircraft" | "events" | "news" | "countries" | "vessels" | "weather" | "satellites" | "airports" | "airquality" | "powerplants" | "ports" | "volcanoes" | "conflict";
+  feed?: "aircraft" | "events" | "news" | "countries" | "vessels" | "weather" | "satellites" | "airports" | "airquality" | "powerplants" | "ports" | "volcanoes" | "cities" | "conflict";
   /** For event-driven layers, which event kinds/tags belong to this layer. */
   eventKinds?: EventKind[];
   providerNote?: string;
@@ -38,6 +39,7 @@ export interface LayerDef {
 
 export const LAYERS: LayerDef[] = [
   { id: "countries", label: "Country borders", color: "#8aa0b6", status: "active", feed: "countries" },
+  { id: "cities", label: "Cities", color: "#dfe8f2", status: "active", feed: "cities", providerNote: "GeoNames (CC-BY) — every major city worldwide" },
   { id: "aircraft", label: "Aircraft / ADS-B", color: "#65f6c7", status: "active", feed: "aircraft", providerNote: "OpenSky Network" },
   { id: "airports", label: "Airports", color: "#9fb2c8", status: "active", feed: "airports", providerNote: "OurAirports (public domain)" },
   { id: "powerplants", label: "Power plants", color: "#ffd08a", status: "active", feed: "powerplants", providerNote: "WRI Global Power Plant DB (CC-BY) — dense over CN/RU/AU" },

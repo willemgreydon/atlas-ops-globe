@@ -35,6 +35,7 @@ export type LodBand = "orbit" | "continent" | "country" | "regional" | "city";
 export type LodLayerKind =
   | "aircraft"
   | "airports"
+  | "cities"
   | "powerplants"
   | "ports"
   | "volcanoes"

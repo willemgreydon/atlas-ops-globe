@@ -19,6 +19,7 @@ export type Selection =
   | { kind: "powerplant"; id: string }
   | { kind: "port"; id: string }
   | { kind: "volcano"; id: string }
+  | { kind: "city"; id: string }
   | { kind: "country"; iso3: string; name?: string }
   | null;
 
@@ -66,6 +67,16 @@ export interface Volcano {
   elevation?: number;
   country?: string;
   lastEruption?: number;
+}
+
+/** City from the static GeoNames gazetteer (/data/cities.json). */
+export interface City {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  country?: string;
+  pop: number;
 }
 
 /** Air-quality point (Open-Meteo, US AQI) sampled at a world city. */
@@ -208,6 +219,8 @@ interface AppState {
   ports: Feed<Port>;
   /** Volcanoes (static Smithsonian GVP Holocene list). */
   volcanoes: Feed<Volcano>;
+  /** World cities (static GeoNames gazetteer); default-on so no region is blank. */
+  cities: Feed<City>;
   /** Air-quality points (Open-Meteo US AQI) at world cities. */
   airquality: Feed<AirQualityRow>;
   /** Satellite catalogue (with TLEs) from the vault; propagated on the globe. */
@@ -471,6 +484,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const powerplants = useStaticJson<PowerPlant>("/data/powerplants.json", "WRI Global Power Plant DB", layers.powerplants);
   const ports = useStaticJson<Port>("/data/ports.json", "NGA World Port Index", layers.ports);
   const volcanoes = useStaticJson<Volcano>("/data/volcanoes.json", "Smithsonian GVP", layers.volcanoes);
+  const cities = useStaticJson<City>("/data/cities.json", "GeoNames", layers.cities);
   const airquality = useFeed<AirQualityRow>("/api/intelligence/airquality", POLL_MS.satellites, layers.airquality);
   const vault = useVaultSnapshot();
 
@@ -498,6 +512,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       powerplants,
       ports,
       volcanoes,
+      cities,
       airquality,
       vault,
       flyTo,
@@ -519,7 +534,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       terrain,
       setTerrain,
     }),
-    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, powerplants, ports, volcanoes, airquality, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
+    [mode, setMode, layers, toggleLayer, selection, select, searchOpen, dock, aircraft, events, news, vessels, weather, markets, conflict, satellites, airports, powerplants, ports, volcanoes, cities, airquality, vault, flyTo, requestFlyTo, quality, autoQuality, atmosphere, lighting, environment, effects, trails, terrain],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
