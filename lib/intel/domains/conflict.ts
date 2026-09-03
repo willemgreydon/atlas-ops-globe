@@ -1,4 +1,5 @@
 import { fetchAcledEvents, acledConfigured } from "../providers/acled";
+import { fetchGdeltEvents } from "@/lib/providers/gdelt-events";
 import { fetchGdeltConflict, CONFLICT_QUERIES } from "@/lib/providers/gdelt-conflict";
 import { prov } from "@/lib/intel/provenance";
 import { isValidPoint } from "@/lib/core/geo";
@@ -24,19 +25,26 @@ import type { VaultEvent } from "../schemas";
  * transient upstream blip counts as failed/skipped but doesn't sink the sync.
  */
 export async function ingestConflict(opts: { days?: number; limit?: number } = {}): Promise<IngestReport> {
-  return runIngestor({ domain: "conflict", source: "gdelt+acled", job: "conflict-events" }, async (c) => {
-    // Several complementary GDELT passes (dense, deduped by id) for broad global
-    // coverage, plus ACLED when credentialed. Passes run sequentially so we don't
-    // hammer GDELT's rate limiter with parallel bursts.
+  return runIngestor({ domain: "conflict", source: "gdelt-events+gdelt-doc+acled", job: "conflict-events" }, async (c) => {
     const gdeltSeen = new Set<string>();
+    const store = (events: WorldEvent[], provider: string) => {
+      const fresh = events.filter((e) => !gdeltSeen.has(e.id));
+      for (const e of events) gdeltSeen.add(e.id);
+      storeWorldEvents(fresh, provider, c);
+    };
+
+    // PRIMARY: GDELT 2.0 Events from the raw data CDN — structured, CAMEO-coded,
+    // and (unlike the DOC API) reachable from datacenters, so this is what keeps
+    // the vault fresh from CI.
+    try { store(await fetchGdeltEvents(8), "gdelt-events"); }
+    catch { c.failed++; }
+
+    // BONUS: DOC-API media search adds headline-level context. It's datacenter-
+    // firewalled (a no-op from CI) but contributes when the sync runs somewhere
+    // GDELT's API is reachable; complementary single-word passes, deduped.
     for (const q of CONFLICT_QUERIES) {
-      try {
-        const events = await fetchGdeltConflict(q, 250);
-        storeWorldEvents(events.filter((e) => !gdeltSeen.has(e.id)), "gdelt-conflict", c);
-        for (const e of events) gdeltSeen.add(e.id);
-      } catch {
-        c.failed++; // a single pass failing shouldn't sink the others
-      }
+      try { store(await fetchGdeltConflict(q, 250), "gdelt-conflict"); }
+      catch { /* DOC API unreachable here — expected on datacenter egress */ }
     }
 
     // ACLED (curated, fatality-verified) merges on top when credentialed. Already
