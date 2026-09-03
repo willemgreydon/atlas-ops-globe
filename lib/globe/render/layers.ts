@@ -33,15 +33,23 @@ const KN_TO_MS = 0.514444;
 /**
  * Camera-to-entity distances (m) inside which the procedural glTF model replaces
  * the flat point/billboard (mission §85). Beyond them the cheap marker carries
- * the dense far view; within them you get a real 3D silhouette. These bubbles are
- * deliberately generous so the models reveal at a moderate zoom — not only when
- * the camera is right on top of the object — while `minimumPixelSize` keeps a
- * far model readable and `scaleByDistance` fades the point out as the model
- * takes over.
+ * the dense far view; within them you get a real 3D silhouette.
+ *
+ * These are tuned per layer by how *clustered* the objects are, not just by
+ * zoom. Satellites are sparse across the whole sky, so a generous bubble shows
+ * them as models from orbit and still reads cleanly. Aircraft (and vessels) pack
+ * thousands into a small area over Europe/the coasts — showing all of them as
+ * models at a continental zoom overlaps into a solid blob — so their bubble is
+ * smaller: they stay as clustered points when zoomed out and only resolve into
+ * models once you zoom into a region where they're spread apart.
  */
 const SAT_MODEL_DISTANCE = 1.5e7;
-const AIRCRAFT_MODEL_DISTANCE = 3.5e6;
-const VESSEL_MODEL_DISTANCE = 2.5e6;
+const AIRCRAFT_MODEL_DISTANCE = 1.4e6;
+const VESSEL_MODEL_DISTANCE = 1.2e6;
+
+/** Uniform on-screen model size (px). Every model reads at the same scale as the
+ *  satellites, regardless of the object's true metres. */
+const MODEL_MIN_PX = 40;
 
 /** glTF model graphics shown only within `near` metres of the camera. */
 function nearModel(uri: string, near: number, minimumPixelSize: number) {
@@ -96,7 +104,7 @@ export function createAircraftLayer(viewer: Viewer, sel: SelMap, sprite: HTMLCan
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
         distanceDisplayCondition: new DistanceDisplayCondition(AIRCRAFT_MODEL_DISTANCE, Number.MAX_VALUE),
       },
-      model: nearModel(modelUrl("aircraft-airliner"), AIRCRAFT_MODEL_DISTANCE, 48),
+      model: nearModel(modelUrl("aircraft-airliner"), AIRCRAFT_MODEL_DISTANCE, MODEL_MIN_PX),
     }),
     orient: orientToSurface,
     orientMaxDistanceM: AIRCRAFT_MODEL_DISTANCE,
@@ -132,7 +140,7 @@ export function createVesselLayer(viewer: Viewer, sel: SelMap): MovingLayer<Vess
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
         distanceDisplayCondition: new DistanceDisplayCondition(VESSEL_MODEL_DISTANCE, Number.MAX_VALUE),
       },
-      model: nearModel(modelUrl("vessel-cargo"), VESSEL_MODEL_DISTANCE, 52),
+      model: nearModel(modelUrl("vessel-cargo"), VESSEL_MODEL_DISTANCE, MODEL_MIN_PX),
     }),
     orient: orientToSurface,
     orientMaxDistanceM: VESSEL_MODEL_DISTANCE,
@@ -198,7 +206,7 @@ export function createSatelliteLayer(viewer: Viewer, sel: SelMap, sat: Sgp4): Mo
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
         distanceDisplayCondition: new DistanceDisplayCondition(SAT_MODEL_DISTANCE, Number.MAX_VALUE),
       },
-      model: nearModel(modelUrl(classifySatellite(s)), SAT_MODEL_DISTANCE, 40),
+      model: nearModel(modelUrl(classifySatellite(s)), SAT_MODEL_DISTANCE, MODEL_MIN_PX),
     }),
     orient: orientToSurface,
     orientMaxDistanceM: SAT_MODEL_DISTANCE,
