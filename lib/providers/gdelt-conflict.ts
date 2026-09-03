@@ -39,9 +39,10 @@ const Schema = z.object({
     .optional(),
 });
 
-// Conflict-focused query (GDELT DOC: space = AND, OR uppercase, quotes = phrase).
-const DEFAULT_QUERY =
-  '(airstrike OR shelling OR clashes OR militants OR insurgents OR gunmen OR "armed group" OR offensive OR ambush OR bombing)';
+// Conflict-focused query. GDELT DOC rejects over-complex queries (many OR
+// clauses / quoted phrases) with a plain-text error, so mirror the proven news
+// query: a handful of simple single-word OR terms, no parens, no phrases.
+const DEFAULT_QUERY = "airstrike OR clashes OR militants OR insurgents OR shelling OR fighting";
 const RELIABILITY = 0.55; // media-derived — deliberately lower than UCDP/ACLED
 
 // Intensity words in the headline → severity band (best-effort, no fatality data).
@@ -106,7 +107,6 @@ export async function fetchGdeltConflict(query = DEFAULT_QUERY): Promise<WorldEv
     maxrecords: "75",
     format: "json",
     sort: "DateDesc",
-    timespan: "3d",
   });
   const raw = await fetchGdeltText(`https://api.gdeltproject.org/api/v2/doc/doc?${qs}`);
   return normalizeGdeltConflict(raw);
