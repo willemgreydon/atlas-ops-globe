@@ -46,6 +46,13 @@ export default function Observatory() {
   return (
     <div className="observatory">
       <ObsHeader persona={persona} setPersona={setPersona} generatedAt={data.generatedAt} status={data.status} />
+      {data.coverage?.hazardOnly && (
+        <div className="obs-caveat">
+          <b>Coverage note:</b> no live conflict data in the vault right now, so <b>Risk</b> reflects
+          natural-hazard <i>severity</i> (earthquakes, storms, fires), not political conflict. Opportunity,
+          reach and entity signals are unaffected. Political-conflict scoring resumes when the conflict feed is live.
+        </div>
+      )}
       <Kpis data={data} persona={persona} />
       <div className="obs-grid">
         <InsightFeed data={data} persona={persona} />

@@ -108,6 +108,7 @@ export interface DashPayload {
   degraded?: boolean;
   status?: string;
   source?: string;
+  coverage?: { conflictCountries: number; hazardOnly: boolean; countriesWithEvents: number };
   counts: Record<string, number>;
   scores: DashScore[];
   entities: {

@@ -24,7 +24,7 @@ export interface ModeDef {
 }
 
 export const MODES: ModeDef[] = [
-  { id: "global", label: "Global", operational: true, defaultLayers: ["countries", "cities", "aircraft", "earthquakes", "naturalEvents", "news"], blurb: "All active intelligence layers fused on one surface." },
+  { id: "global", label: "Global", operational: true, defaultLayers: ["countries", "cities", "space"], blurb: "All active intelligence layers fused on one surface." },
   { id: "aviation", label: "Aviation", operational: true, defaultLayers: ["countries", "aircraft"], blurb: "Live ADS-B aircraft positions from OpenSky." },
   { id: "disasters", label: "Disasters", operational: true, defaultLayers: ["countries", "earthquakes", "naturalEvents", "volcanoes"], blurb: "Earthquakes (USGS), natural events (NASA EONET) and volcanoes (Smithsonian GVP)." },
   { id: "news", label: "News", operational: true, defaultLayers: ["countries", "news"], blurb: "Global news discovery via GDELT." },

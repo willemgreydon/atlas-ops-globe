@@ -678,3 +678,5 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .infl-list li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 12px; color: var(--muted); }
 .infl-list li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .infl-list li b { color: var(--text); font: 700 12px var(--mono); }
+.obs-caveat { border: 1px solid rgba(255,174,69,0.35); background: rgba(255,174,69,0.06); color: var(--muted); border-radius: 9px; padding: 9px 12px; font-size: 12px; line-height: 1.5; margin-bottom: 12px; }
+.obs-caveat b { color: var(--text); }

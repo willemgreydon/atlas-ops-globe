@@ -90,8 +90,13 @@ export function scoreCountries(signals: CountrySignals[]): CountryScore[] {
   const nRecent = col((s) => s.eventsRecent + s.newsRecent);
 
   return signals.map((s, i) => {
-    // Risk: violence + hazard + severity + attention pressure.
-    const risk = pct(clamp01(0.42 * nConflict[i] + 0.24 * nDisaster[i] + 0.22 * nSevere[i] + 0.12 * nNews[i]));
+    // Risk = danger INTENSITY, not event volume. Leans on conflict + severe
+    // (warning/critical) events. Raw disaster *count* and news volume are
+    // deliberately excluded from risk: they track sensor coverage and media
+    // attention (dense over the US/EU), not actual danger — including them put
+    // well-instrumented, peaceful countries at the top. A small disaster-count
+    // term keeps a genuine multi-hazard crisis visible without dominating.
+    const risk = pct(clamp01(0.5 * nConflict[i] + 0.42 * nSevere[i] + 0.08 * nDisaster[i]));
     const stability = 100 - risk;
     // Opportunity: reachable market + economy, discounted by instability.
     const rawOpp = 0.5 * nReach[i] + 0.3 * nGdp[i] + 0.2 * (nNews[i]);

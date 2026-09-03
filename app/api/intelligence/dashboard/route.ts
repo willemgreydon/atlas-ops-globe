@@ -116,8 +116,16 @@ function build(): unknown {
     { label: "Space capability ↔ economy", r: round2(pearson(scores.map((s) => s.space), scores.map((s) => s.gdp ?? 0))) },
   ];
 
+  const conflictCountries = scores.filter((s) => s.conflict > 0).length;
   return {
     generatedAt: new Date().toISOString(),
+    coverage: {
+      conflictCountries,
+      // When no conflict data is present, the Risk index reflects natural-hazard
+      // severity only — the UI says so, so a Political watcher isn't misled.
+      hazardOnly: conflictCountries === 0,
+      countriesWithEvents: scores.filter((s) => s.conflict + s.disaster + s.severeEvents > 0).length,
+    },
     counts: {
       countries: countries.length, sanctions: sanctionsTotal, vulnerabilities: cyberTotal, kev: cyberKev,
       persons: personRefs.length, organizations: orgRefs.length, relationships: degree.size,
@@ -180,6 +188,7 @@ export async function GET() {
       degraded: true,
       status: "offline",
       source: "vault-unavailable",
+      coverage: { conflictCountries: 0, hazardOnly: true, countriesWithEvents: 0 },
       counts: {},
       scores: [],
       entities: { persons: [], organizations: [], connected: [] },
