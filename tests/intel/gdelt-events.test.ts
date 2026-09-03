@@ -26,10 +26,16 @@ describe("parseGdeltEvents — GDELT 2.0 Event → conflict WorldEvent", () => {
     expect(e.kind).toBe("conflict");
     expect(e.id).toBe("event:gdelt-ev:123");
     expect(e.location).toEqual({ lat: 53.5, lon: -2.2 });
-    expect(e.severity).toBe("warning"); // root 19, quad 4, 3 reports (< 30)
+    expect(e.severity).toBe("warning"); // root 19, quad 4, 3 reports (< 50)
     expect(e.title).toContain("Armed clash");
     expect(e.occurredAt).toBe("2026-09-03T12:30:00Z");
     expect(e.provenance?.provider).toBe("gdelt-events");
+  });
+
+  it("resolves the country from GDELT's own ActionGeo name (not nearest centroid)", () => {
+    expect(parseGdeltEvents(row())[0].countryCode).toBe("GB"); // "…, United Kingdom"
+    // A Miami event must resolve to the US via its name, not snap to the Bahamas.
+    expect(parseGdeltEvents(row({ 52: "Miami, Florida, United States", 56: "25.77", 57: "-80.19" }))[0].countryCode).toBe("US");
   });
 
   it("drops the cooperation quadrants (1, 2)", () => {
@@ -45,8 +51,16 @@ describe("parseGdeltEvents — GDELT 2.0 Event → conflict WorldEvent", () => {
     expect(parseGdeltEvents(row({ 28: "20" }))[0].severity).toBe("critical");
   });
 
-  it("escalates a heavily-reported assault to critical", () => {
-    expect(parseGdeltEvents(row({ 28: "18", 33: "40" }))[0].severity).toBe("critical");
+  it("escalates a heavily-reported assault (root ≥ 18, ≥ 50 reports) to critical", () => {
+    expect(parseGdeltEvents(row({ 28: "18", 33: "60" }))[0].severity).toBe("critical");
+  });
+
+  it("keeps a lightly-reported assault at warning, not critical", () => {
+    expect(parseGdeltEvents(row({ 28: "18", 33: "40" }))[0].severity).toBe("warning");
+  });
+
+  it("caps material-conflict coercion (root 17) at warning even when heavily reported", () => {
+    expect(parseGdeltEvents(row({ 28: "17", 33: "200" }))[0].severity).toBe("warning");
   });
 
   it("drops rows without a valid point", () => {

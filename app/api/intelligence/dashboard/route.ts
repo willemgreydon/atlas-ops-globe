@@ -17,6 +17,10 @@ export const dynamic = "force-dynamic";
 
 const REACH = reach as Record<string, { pop: number; cities: number }>;
 const RECENT_MS = 14 * 86_400_000;
+// Conflict is a rolling media signal — count only the last 30 days so stale
+// events decay out of the Risk index and a country doesn't stay "hot" forever
+// on incidents that have gone quiet. Disasters/quakes keep their own lifecycle.
+const CONFLICT_WINDOW_MS = 30 * 86_400_000;
 
 // Warm-instance cache so a dashboard load doesn't hammer the Turso read quota.
 let cache: { at: number; body: unknown } | null = null;
@@ -35,6 +39,7 @@ function build(): unknown {
   const db = getDb();
   const all = (sql: string, params: unknown[] = []): Row[] => db.prepare(sql).all(...params) as Row[];
   const recentIso = new Date(Date.now() - RECENT_MS).toISOString();
+  const conflictSinceIso = new Date(Date.now() - CONFLICT_WINDOW_MS).toISOString();
 
   // --- per-country aggregates (GROUP BY, bounded) ---------------------------
   const countries = all("SELECT iso2, iso3, name, region FROM countries");
@@ -43,7 +48,7 @@ function build(): unknown {
     for (const r of rows) { const k = str(r[key]); if (k) m.set(k, num(r[val])); }
     return m;
   };
-  const conflict = toMap(all("SELECT country_code, COUNT(*) c FROM events WHERE kind='conflict' AND country_code IS NOT NULL GROUP BY country_code"), "country_code", "c");
+  const conflict = toMap(all("SELECT country_code, COUNT(*) c FROM events WHERE kind='conflict' AND country_code IS NOT NULL AND occurred_at >= ? GROUP BY country_code", [conflictSinceIso]), "country_code", "c");
   const disaster = toMap(all("SELECT country_code, COUNT(*) c FROM events WHERE kind='disaster' AND country_code IS NOT NULL GROUP BY country_code"), "country_code", "c");
   const severe = toMap(all("SELECT country_code, COUNT(*) c FROM events WHERE severity IN ('warning','critical') AND country_code IS NOT NULL GROUP BY country_code"), "country_code", "c");
   const eventsRecent = toMap(all("SELECT country_code, COUNT(*) c FROM events WHERE occurred_at >= ? AND country_code IS NOT NULL GROUP BY country_code", [recentIso]), "country_code", "c");

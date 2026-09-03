@@ -72,7 +72,10 @@ function storeWorldEvents(events: WorldEvent[], provider: string, c: IngestCount
     let iso2 = e.countryCode;
     let basis: "reported" | "spatially-near" = "reported";
     if (!iso2) {
-      const near = nearestCountry(e.location);
+      // No reported country (GDELT gave a bare point) — fall back to the nearest
+      // centroid, but reject open-ocean points >1500 km from any land centroid
+      // so maritime noise doesn't inflate a random coastal nation.
+      const near = nearestCountry(e.location, 1500);
       if (near) { iso2 = near.iso2; basis = "spatially-near"; }
     }
     const record: VaultEvent = {

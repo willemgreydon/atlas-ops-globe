@@ -137,14 +137,18 @@ export function locateNews(title: string, sourceCountry?: string | null): Resolv
   return resolveCountry(sourceCountry ?? null);
 }
 
-/** Nearest country to a point (centroid distance). For geolocating events. */
-export function nearestCountry(point: GeoPoint): ResolvedCountry | null {
+/** Nearest country to a point (centroid distance). For geolocating events.
+ *  `maxKm` rejects points that are absurdly far from ANY centroid (open ocean),
+ *  which would otherwise snap onto the nearest speck of land. Centroid distance
+ *  is coarse — big-country interiors sit far from their own centroid — so keep
+ *  the cap generous; it's a sanity net, not a precise point-in-polygon test. */
+export function nearestCountry(point: GeoPoint, maxKm = Infinity): ResolvedCountry | null {
   let best: CountryCentroid | null = null;
   let bestKm = Infinity;
   for (const c of countryCentroids) {
     const d = haversineKm(point, c.point);
     if (d < bestKm) { bestKm = d; best = c; }
   }
-  if (!best) return null;
+  if (!best || bestKm > maxKm) return null;
   return { iso2: best.iso2, iso3: best.iso3, name: best.name, point: best.point };
 }

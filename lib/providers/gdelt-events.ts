@@ -6,6 +6,7 @@ import { hashPayload } from "@/lib/fetch-json";
 import { makeProvenance } from "@/lib/core/provenance";
 import { scoreConfidence } from "@/lib/core/confidence";
 import { isValidPoint } from "@/lib/core/geo";
+import { resolveCountry } from "@/lib/intel/resolve";
 import type { Severity, WorldEvent } from "@/types/domain";
 
 /**
@@ -48,10 +49,12 @@ function severityFor(root: number, quad: number, narticles: number): Severity {
   // GoldsteinScale is fixed per CAMEO type (every "fight" is ~-10), so it can't
   // rank intensity; media prominence (NumArticles) is the better signal — a
   // widely-reported incident is the bigger event. Reserve critical for mass
-  // violence or heavily-reported material conflict so it stays meaningful.
-  if (root === 20) return "critical";               // mass / unconventional violence
-  if (quad === 4) return narticles >= 30 ? "critical" : "warning"; // assault / fight
-  return "watch";                                   // verbal conflict (QuadClass 3)
+  // violence or *heavily* reported actual violence (assault/armed clash) so the
+  // top band stays meaningful — a lone wire report of a scuffle shouldn't be
+  // "critical". Material-conflict coercion (root 17) tops out at warning.
+  if (root === 20) return "critical";                          // mass / unconventional violence
+  if (quad === 4) return root >= 18 && narticles >= 50 ? "critical" : "warning";
+  return "watch";                                              // verbal conflict (QuadClass 3)
 }
 
 /** GDELT `YYYYMMDDHHMMSS` → ISO-8601 (UTC). */
@@ -84,6 +87,11 @@ export function parseGdeltEvents(csv: string): WorldEvent[] {
     const place = (f[C.geoFull] || "").trim();
     const placeShort = place ? place.split(",")[0] : "";
     const country = place ? place.split(",").pop()!.trim() : "";
+    // Resolve the country from GDELT's OWN ActionGeo name (authoritative), not by
+    // nearest-centroid on lat/lon — the latter snaps coastal/peripheral points of
+    // big countries onto tiny neighbours (a Miami event lands ~300 km from the
+    // Bahamas centroid but ~2000 km from the US centroid in Kansas → "Bahamas").
+    const countryCode = resolveCountry(country)?.iso2 || undefined;
     const url = f[C.url] || "";
     const label = ROOT_LABEL[root] ?? "Conflict event";
     const confidence = scoreConfidence({ sourceCount: narts, providerReliability: RELIABILITY, geoPrecision: 0.7 }).score;
@@ -95,6 +103,7 @@ export function parseGdeltEvents(csv: string): WorldEvent[] {
       severity: severityFor(root, quad, narts),
       occurredAt,
       location,
+      countryCode,
       source: "GDELT",
       sourceUrl: url,
       confidence,
