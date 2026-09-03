@@ -51,11 +51,17 @@ export default function Observatory() {
   return (
     <div className="observatory">
       <ObsHeader persona={persona} setPersona={setPersona} tab={tab} setTab={setTab} generatedAt={data.generatedAt} status={data.status} />
-      {data.coverage?.hazardOnly && (
+      {data.coverage?.hazardOnly ? (
         <div className="obs-caveat">
-          <b>Coverage note:</b> no live conflict data in the vault right now, so <b>Risk</b> reflects natural-hazard
+          <b>Coverage note:</b> no live conflict data right now, so <b>Risk</b> reflects natural-hazard
           <i> severity</i> (earthquakes, storms, fires), not political conflict. Opportunity, reach and entity signals are
           unaffected. Political-conflict scoring resumes when the conflict feed is live.
+        </div>
+      ) : data.coverage?.conflictSource === "gdelt" && (
+        <div className="obs-caveat info">
+          <b>Conflict signal · live.</b> Risk now folds in political-violence reporting across{" "}
+          <b>{data.coverage.conflictCountries}</b> countries from GDELT (keyless, media-derived — noisier than a curated
+          fatality record). A curated UCDP/ACLED feed merges on top when a credential is set.
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeGdelt } from "@/lib/providers/gdelt";
+import { normalizeGdelt, gdeltParenQuery } from "@/lib/providers/gdelt";
 
 const sample = {
   articles: [
@@ -57,5 +57,17 @@ describe("GDELT normalization", () => {
 
   it("parses an empty/absent article list to an empty array", () => {
     expect(normalizeGdelt({})).toEqual([]);
+  });
+});
+
+describe("gdeltParenQuery — GDELT now requires OR'd terms in ()", () => {
+  it("wraps a bare OR query", () => {
+    expect(gdeltParenQuery("airstrike OR clashes OR shelling")).toBe("(airstrike OR clashes OR shelling)");
+  });
+  it("leaves a single-term query untouched", () => {
+    expect(gdeltParenQuery("earthquake")).toBe("earthquake");
+  });
+  it("is idempotent for an already-parenthesised query", () => {
+    expect(gdeltParenQuery("(a OR b)")).toBe("(a OR b)");
   });
 });

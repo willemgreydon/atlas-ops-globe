@@ -16,7 +16,7 @@ export default function StatusBadge({ status, title }: { status: DataStatus; tit
   return (
     <span className={`status-badge status-${status}`} title={title}>
       <i className="status-dot" />
-      {LABEL[status]}
+      <span className="status-label">{LABEL[status]}</span>
     </span>
   );
 }

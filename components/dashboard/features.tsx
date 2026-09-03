@@ -41,7 +41,7 @@ export function QuadrantScatter({ data }: { data: DashPayload }) {
     group: cluster.assignments[i], frontier: mode === "frontier" && front.has(i),
   }));
   return (
-    <Panel title="Risk – Opportunity matrix" sub={`${scored.length} countries`} wide>
+    <Panel title="Risk – Opportunity matrix" sub={`${scored.length} countries`}>
       <div className="seg small mb">
         <button className={mode === "frontier" ? "active" : ""} onClick={() => setMode("frontier")}>pareto frontier</button>
         <button className={mode === "clusters" ? "active" : ""} onClick={() => setMode("clusters")}>k-means clusters</button>
@@ -87,7 +87,7 @@ export function CorrelationHeatmap({ data }: { data: DashPayload }) {
     return { ...correlationMatrix(vectors), labels };
   }, [data]);
   return (
-    <Panel title="Dependency matrix" sub="pairwise Pearson r" wide>
+    <Panel title="Dependency matrix" sub="pairwise Pearson r">
       <Heatmap keys={keys} matrix={matrix} labels={labels} />
       <p className="obs-note">Green = positive co-movement, red = inverse. |r| ≥ 0.5 is a strong dependency.</p>
     </Panel>
@@ -100,7 +100,7 @@ export function DistributionPanel({ data }: { data: DashPayload }) {
   const values = useMemo(() => vec(data.scores, metric).filter((v) => v > 0 || metric === "risk" || metric === "opportunity"), [data, metric]);
   const st = useMemo(() => describe(values), [values]);
   return (
-    <Panel title="Distribution & statistics" wide>
+    <Panel title="Distribution & statistics">
       <div className="seg small mb wrap">
         {SIGNALS.map((s) => <button key={s.k as string} className={metric === s.k ? "active" : ""} onClick={() => setMetric(s.k)}>{s.l}</button>)}
       </div>
@@ -215,7 +215,7 @@ export function CompareCountries({ data }: { data: DashPayload }) {
   const cb = data.scores.find((s) => s.iso2 === b);
   if (!ca || !cb) return null;
   return (
-    <Panel title="Country comparison" wide>
+    <Panel title="Country comparison">
       <div className="cmp-pick">
         <select value={a} onChange={(e) => setA(e.target.value)}>{named.map((s) => <option key={s.iso2} value={s.iso2}>{s.name}</option>)}</select>
         <span>vs</span>
@@ -267,7 +267,7 @@ export function EntityNetwork({ data }: { data: DashPayload }) {
   }, [data]);
   if (nodes.length === 0) return null;
   return (
-    <Panel title="Entity influence network" sub="degree centrality">
+    <Panel title="Entity influence network" sub="degree centrality" wide>
       <Network nodes={nodes} edges={edges} />
       <p className="obs-note">Node size = relationship-graph degree. The most-connected entities anchor the intelligence graph.</p>
     </Panel>

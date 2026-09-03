@@ -467,8 +467,36 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
   .right-stack { width: 336px; }
 }
 @media (max-width: 760px) {
-  .nav button:nth-child(n + 5) { display: none; }
+  /* --- Header: two clean rows instead of one crowded strip ---
+     Row 1 = brand + the essential chrome (view toggle, search, status).
+     Row 2 = the full-width, horizontally-scrollable modes strip (all 7 stay
+     reachable, nothing squished into a 60px sliver). The shell's header row
+     auto-sizes to fit both rows. */
+  .app-shell { grid-template-rows: auto 1fr 30px; }
+  .topbar {
+    flex-wrap: wrap; height: auto; gap: 8px 10px; padding: 7px 10px;
+    align-items: center;
+  }
+  .brand { order: 0; }
+  .topbar-right { order: 1; margin-left: auto; gap: 8px; }
+  .nav {
+    order: 2; flex: 1 0 100%; width: 100%; padding-bottom: 1px;
+    -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, #000 92%, transparent);
+  }
+  .search-trigger { padding: 6px 7px; }
+  .search-trigger .st-label, .search-trigger kbd { display: none; }
+  .status-badge { padding: 4px; }
+  .status-badge .status-label { display: none; }
   .utc { display: none; }
+
+  /* Observatory header + tabs stay usable at phone width. */
+  .obs-head { gap: 10px 12px; }
+  .obs-persona { margin-left: 0; }
+  .obs-tabs { overflow-x: auto; scrollbar-width: none; }
+  .obs-tabs::-webkit-scrollbar { display: none; }
+  .observatory { padding: 12px 12px 24px; }
+
   /* Dev-only FPS panel would overlap the sheets on a phone. */
   .perf-panel { display: none; }
 
@@ -680,6 +708,8 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .infl-list li b { color: var(--text); font: 700 12px var(--mono); }
 .obs-caveat { border: 1px solid rgba(255,174,69,0.35); background: rgba(255,174,69,0.06); color: var(--muted); border-radius: 9px; padding: 9px 12px; font-size: 12px; line-height: 1.5; margin-bottom: 12px; }
 .obs-caveat b { color: var(--text); }
+.obs-caveat.info { border-color: rgba(101,246,199,0.32); background: rgba(101,246,199,0.05); }
+.obs-caveat.info b { color: var(--accent); }
 
 /* ===================== Observatory · features & charts =================== */
 .obs-headwrap { margin-bottom: 12px; }
@@ -688,15 +718,23 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .obs-tabs button:hover { color: var(--text); }
 .obs-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-.feat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; align-items: start; }
-.feat-grid .obs-panel.wide { grid-column: 1 / -1; }
-@media (max-width: 900px) { .feat-grid { grid-template-columns: 1fr; } .feat-grid .obs-panel.wide { grid-column: auto; } }
+/* Masonry via CSS multi-column: tiles pack tightly top-to-bottom with no
+   dead half-cells, and `wide` panels break out to span every column. This is
+   what kills the white space that a fixed 2-col grid left under short tiles. */
+.feat-grid { columns: 2; column-gap: 12px; }
+.feat-grid > .obs-panel { break-inside: avoid; margin: 0 0 12px; width: 100%; }
+.feat-grid > .obs-panel.wide { column-span: all; }
+@media (max-width: 900px) { .feat-grid { columns: 1; } }
+@media (min-width: 1500px) { .feat-grid { columns: 3; } }
 .mb { margin-bottom: 10px; }
 .seg.small.wrap { flex-wrap: wrap; gap: 3px; }
 .up { color: var(--accent); } .down { color: var(--critical); }
 
 /* charts */
-.chart { width: 100%; height: auto; display: block; }
+.chart { width: 100%; height: auto; display: block; max-height: 460px; }
+/* Ring-based graphs read best compact and centred, not stretched to tile width. */
+.chart.net { max-width: 480px; margin-inline: auto; }
+.chart.radar { max-width: 300px; margin-inline: auto; }
 .chart .grid { stroke: rgba(255,255,255,0.08); fill: none; }
 .chart .axis { stroke: var(--line-strong); }
 .chart .axis-lbl { fill: var(--muted-2); font: 10px var(--mono); }

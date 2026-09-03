@@ -28,6 +28,22 @@ const Schema = z.object({
 
 const DEFAULT_QUERY = "conflict OR diplomacy OR sanctions OR disaster";
 
+/**
+ * GDELT DOC 2.0 now *requires* OR'd terms to be wrapped in parentheses — a bare
+ * `a OR b` returns a plain-text rejection ("Queries containing OR'd terms must
+ * be surrounded by ()"), which our text-guard turns into an error and an empty
+ * feed. We wrap defensively here, at the GDELT boundary only, because the same
+ * query strings are shared with NewsAPI / EventRegistry (different syntax) and
+ * must not be mutated at the source. Idempotent for already-parenthesised or
+ * single-term queries.
+ */
+export function gdeltParenQuery(q: string): string {
+  const t = q.trim();
+  if (!/ OR /i.test(t)) return t;
+  if (t.startsWith("(") && t.endsWith(")")) return t;
+  return `(${t})`;
+}
+
 /** GDELT seendate is `YYYYMMDDTHHMMSSZ`; normalize to ISO-8601. */
 export function parseSeenDate(s: string): string {
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(s);
@@ -38,7 +54,7 @@ export function parseSeenDate(s: string): string {
 
 export async function fetchGdeltNews(query = DEFAULT_QUERY): Promise<NewsItem[]> {
   const qs = new URLSearchParams({
-    query,
+    query: gdeltParenQuery(query),
     mode: "ArtList",
     maxrecords: "50",
     format: "json",
@@ -92,7 +108,13 @@ export async function fetchGdeltText(url: string): Promise<unknown> {
   const timer = setTimeout(() => ctrl.abort(), 20_000);
   try {
     const res = await fetch(url, {
-      headers: { "user-agent": "atlas-ops-globe/0.1", accept: "application/json" },
+      // GDELT resets the connection (ECONNRESET) for bare tool user-agents; a
+      // browser-like UA is required to get a response at all. Keep the product
+      // token in the comment segment for honest attribution.
+      headers: {
+        "user-agent": "Mozilla/5.0 (compatible; atlas-ops-globe/0.1; +https://github.com/atlas-ops-globe)",
+        accept: "application/json",
+      },
       signal: ctrl.signal,
       next: { revalidate: 0 },
     });

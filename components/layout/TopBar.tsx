@@ -67,7 +67,7 @@ export default function TopBar() {
           <button className={app.view === "dashboard" ? "active" : ""} onClick={() => app.setView("dashboard")} aria-pressed={app.view === "dashboard"}>Observatory</button>
         </div>
         <button className="search-trigger" onClick={() => app.setSearchOpen(true)} aria-label="Search (Cmd+K)">
-          <Search size={13} /> Search
+          <Search size={13} /> <span className="st-label">Search</span>
           <kbd>⌘K</kbd>
         </button>
         <StatusBadge status={status} title="Overall feed status" />

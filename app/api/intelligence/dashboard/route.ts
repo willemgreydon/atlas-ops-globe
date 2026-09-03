@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/intel/db";
 import { finnhubConfigured, fetchQuotes } from "@/lib/intel/providers/finnhub";
 import { cachedFetch } from "@/lib/intel/live";
+import { fetchGdeltConflict } from "@/lib/providers/gdelt-conflict";
 import {
   scoreCountries,
   buildInsights,
@@ -31,7 +32,48 @@ function pick(map: Map<string, number>, iso2: string, iso3?: string): number {
   return (map.get(iso2) ?? 0) + (iso3 ? map.get(iso3) ?? 0 : 0);
 }
 
-function build(): unknown {
+/** Live conflict counts folded into the vault aggregates before scoring. */
+export interface LiveConflict {
+  conflict: Map<string, number>;
+  severe: Map<string, number>;
+  source: string;
+}
+const emptyConflict = (): LiveConflict => ({ conflict: new Map(), severe: new Map(), source: "" });
+
+/** Resolve `p`, but never wait longer than `ms` — the abandoned fetch keeps
+ *  running under cachedFetch, so a later load still picks up its result. */
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fallback), ms))]);
+}
+
+/**
+ * Keyless live conflict, mirroring the globe's /conflict route baseline: GDELT
+ * DOC (media-derived, always-on, ISO-geolocated). Counted per ISO code so the
+ * dashboard's Risk index is political-conflict-aware even though the vault
+ * `events` table has no conflict feed persisted. Never throws — a dead upstream
+ * just yields nothing and the honest "hazard-only" coverage note re-appears.
+ * (UCDP is handled on the globe route; its records carry no ISO code so they
+ * can't be counted per-country here without a name→ISO pass.)
+ */
+async function fetchLiveConflict(): Promise<LiveConflict> {
+  const out = emptyConflict();
+  const bump = (m: Map<string, number>, iso?: string) => {
+    if (!iso) return;
+    const k = iso.toUpperCase();
+    m.set(k, (m.get(k) ?? 0) + 1);
+  };
+  try {
+    const events = await cachedFetch("dash-gdelt-conflict", 10 * 60_000, () => fetchGdeltConflict());
+    for (const e of events) {
+      bump(out.conflict, e.countryCode);
+      if (e.severity === "warning" || e.severity === "critical") bump(out.severe, e.countryCode);
+    }
+    if (out.conflict.size > 0) out.source = "gdelt";
+  } catch { /* keyless upstream hiccup → hazard-only note stays honest */ }
+  return out;
+}
+
+function build(live: LiveConflict = emptyConflict()): unknown {
   const db = getDb();
   const all = (sql: string, params: unknown[] = []): Row[] => db.prepare(sql).all(...params) as Row[];
   const recentIso = new Date(Date.now() - RECENT_MS).toISOString();
@@ -67,9 +109,9 @@ function build(): unknown {
     const rr = REACH[iso2] ?? REACH[iso3] ?? { pop: 0, cities: 0 };
     return {
       iso2, iso3, name: str(c.name), region: str(c.region) || undefined,
-      conflict: pick(conflict, iso2, iso3),
+      conflict: pick(conflict, iso2, iso3) + pick(live.conflict, iso2, iso3),
       disaster: pick(disaster, iso2, iso3),
-      severeEvents: pick(severe, iso2, iso3),
+      severeEvents: pick(severe, iso2, iso3) + pick(live.severe, iso2, iso3),
       eventsRecent: pick(eventsRecent, iso2, iso3),
       news: pick(news, iso2, iso3),
       newsRecent: pick(newsRecent, iso2, iso3),
@@ -121,6 +163,7 @@ function build(): unknown {
     generatedAt: new Date().toISOString(),
     coverage: {
       conflictCountries,
+      conflictSource: live.source || undefined,
       // When no conflict data is present, the Risk index reflects natural-hazard
       // severity only — the UI says so, so a Political watcher isn't misled.
       hazardOnly: conflictCountries === 0,
@@ -163,8 +206,14 @@ export async function GET() {
     return NextResponse.json({ ...(cache.body as Record<string, unknown>), markets });
   }
 
+  // Keyless live conflict (GDELT) folded into the vault aggregates so Risk is
+  // political-conflict-aware without an ACLED/UCDP credential or a vault sync.
+  // Bounded so a throttled/slow GDELT can never stall the dashboard: on timeout
+  // we build hazard-only now and the next rebuild picks up the cached counts.
+  const live = await withTimeout(fetchLiveConflict(), 4000, emptyConflict());
+
   try {
-    const b = build() as Record<string, unknown>;
+    const b = build(live) as Record<string, unknown>;
     const scores = b._scoresForInsights as CountryScore[];
     delete b._scoresForInsights;
     const entities = b.entities as { persons: EntityRef[]; organizations: EntityRef[] };

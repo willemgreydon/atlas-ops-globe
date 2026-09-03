@@ -4,7 +4,7 @@ import { makeProvenance } from "@/lib/core/provenance";
 import { scoreConfidence } from "@/lib/core/confidence";
 import { stableId } from "@/lib/core/id";
 import { locateNews } from "@/lib/intel/resolve";
-import { fetchGdeltText, parseSeenDate } from "@/lib/providers/gdelt";
+import { fetchGdeltText, parseSeenDate, gdeltParenQuery } from "@/lib/providers/gdelt";
 import type { ProviderDefinition } from "@/lib/core/provider";
 import type { Severity, WorldEvent } from "@/types/domain";
 
@@ -39,9 +39,10 @@ const Schema = z.object({
     .optional(),
 });
 
-// Conflict-focused query. GDELT DOC rejects over-complex queries (many OR
-// clauses / quoted phrases) with a plain-text error, so mirror the proven news
-// query: a handful of simple single-word OR terms, no parens, no phrases.
+// Conflict-focused query: a handful of simple single-word OR terms, no quoted
+// phrases (GDELT DOC rejects over-complex queries with a plain-text error). The
+// OR terms are parenthesised at the fetch layer via gdeltParenQuery — GDELT now
+// requires that wrapping or it rejects the request.
 const DEFAULT_QUERY = "airstrike OR clashes OR militants OR insurgents OR shelling OR fighting";
 const RELIABILITY = 0.55; // media-derived — deliberately lower than UCDP/ACLED
 
@@ -102,7 +103,7 @@ export function normalizeGdeltConflict(raw: unknown): WorldEvent[] {
 
 export async function fetchGdeltConflict(query = DEFAULT_QUERY): Promise<WorldEvent[]> {
   const qs = new URLSearchParams({
-    query,
+    query: gdeltParenQuery(query),
     mode: "ArtList",
     maxrecords: "75",
     format: "json",
