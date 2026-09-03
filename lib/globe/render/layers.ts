@@ -33,12 +33,15 @@ const KN_TO_MS = 0.514444;
 /**
  * Camera-to-entity distances (m) inside which the procedural glTF model replaces
  * the flat point/billboard (mission §85). Beyond them the cheap marker carries
- * the dense far view; within them you get a real 3D silhouette. A generous
- * satellite bubble lets tracked GEO birds show their dish once the camera flies in.
+ * the dense far view; within them you get a real 3D silhouette. These bubbles are
+ * deliberately generous so the models reveal at a moderate zoom — not only when
+ * the camera is right on top of the object — while `minimumPixelSize` keeps a
+ * far model readable and `scaleByDistance` fades the point out as the model
+ * takes over.
  */
-const SAT_MODEL_DISTANCE = 4.0e6;
-const AIRCRAFT_MODEL_DISTANCE = 8.0e5;
-const VESSEL_MODEL_DISTANCE = 5.0e5;
+const SAT_MODEL_DISTANCE = 1.5e7;
+const AIRCRAFT_MODEL_DISTANCE = 3.5e6;
+const VESSEL_MODEL_DISTANCE = 2.5e6;
 
 /** glTF model graphics shown only within `near` metres of the camera. */
 function nearModel(uri: string, near: number, minimumPixelSize: number) {
@@ -195,7 +198,7 @@ export function createSatelliteLayer(viewer: Viewer, sel: SelMap, sat: Sgp4): Mo
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
         distanceDisplayCondition: new DistanceDisplayCondition(SAT_MODEL_DISTANCE, Number.MAX_VALUE),
       },
-      model: nearModel(modelUrl(classifySatellite(s)), SAT_MODEL_DISTANCE, 56),
+      model: nearModel(modelUrl(classifySatellite(s)), SAT_MODEL_DISTANCE, 40),
     }),
     orient: orientToSurface,
     orientMaxDistanceM: SAT_MODEL_DISTANCE,
