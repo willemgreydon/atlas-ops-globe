@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { getDb } from "./db";
+import { getReadDb } from "./db";
 import { count } from "./repositories";
 import { domainPath } from "./paths";
 
@@ -35,7 +35,7 @@ export interface GlobalSnapshot {
 }
 
 export function buildGlobalSnapshot(): GlobalSnapshot {
-  const db = getDb();
+  const db = getReadDb();
   const dayAgo = new Date(Date.now() - 86400_000).toISOString();
 
   const majorStories = (

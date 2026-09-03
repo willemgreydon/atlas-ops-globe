@@ -1,5 +1,5 @@
 import type { Db } from "./db";
-import { getDb } from "./db";
+import { getDb, getReadDb } from "./db";
 import type {
   VaultCountry, VaultEconomicObs, VaultEntity, VaultEvent, VaultMarketObs, VaultNews,
   VaultOrganization, VaultPerson, VaultProvenance, VaultRelationship, VaultSanction,
@@ -266,13 +266,13 @@ function syncFts(db: Db, table: string, id: string, a: string, b: string): void 
 // --------------------------------------------------------------------------
 // Reads / stats
 // --------------------------------------------------------------------------
-export function count(table: string, where?: string, params: unknown[] = [], db = getDb()): number {
+export function count(table: string, where?: string, params: unknown[] = [], db = getReadDb()): number {
   const row = db.prepare(`SELECT COUNT(*) AS n FROM ${table}${where ? ` WHERE ${where}` : ""}`)
     .get(...(params as never[])) as { n: number };
   return row.n;
 }
 
-export function tableCounts(db = getDb()): Record<string, number> {
+export function tableCounts(db = getReadDb()): Record<string, number> {
   const tables = [
     "countries", "entities", "relationships", "events", "news_articles", "news_stories",
     "persons", "organizations", "economic_observations", "vulnerabilities", "space_objects",

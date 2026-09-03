@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
   // from node_modules, never bundled/traced by Turbopack — externalize it so
   // the prebuilt .node binary loads correctly in the serverless function.
   serverExternalPackages: ["libsql"],
+  // Ship the read-only vault snapshot INTO the intelligence API serverless
+  // functions. It's the fallback getReadDb() serves when Turso's free read quota
+  // is blocked — without it, the file exists in the repo but not in the function
+  // bundle, so the fallback would ENOENT. Scoped to the vault-read routes only.
+  outputFileTracingIncludes: {
+    "/api/intelligence/**": ["./data/vault-snapshot.db"],
+  },
   turbopack: {
     resolveAlias: {
       // Drop Cesium's Gaussian-Splat WASM loader — its inlined binary breaks

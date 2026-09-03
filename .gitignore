@@ -22,6 +22,10 @@ coverage
 /data/*.db-wal
 # libsql embedded replica (Turso) + its sidecar files
 /data/replica.db*
+# EXCEPTION: the read-only vault snapshot IS committed — it's the fallback the
+# read path serves when Turso's free read quota is blocked (see lib/intel/db.ts
+# getReadDb + next.config outputFileTracingIncludes). Refresh via scripts/build-vault-snapshot.
+!/data/vault-snapshot.db
 # Raw provider snapshots + generated artifacts that churn every run
 /intelligence/**/raw/
 /intelligence/**/snapshots/

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/intel/db";
+import { getReadDb } from "@/lib/intel/db";
 import { finnhubConfigured, fetchQuotes } from "@/lib/intel/providers/finnhub";
 import { cachedFetch } from "@/lib/intel/live";
 import {
@@ -36,7 +36,7 @@ function pick(map: Map<string, number>, iso2: string, iso3?: string): number {
 }
 
 function build(): unknown {
-  const db = getDb();
+  const db = getReadDb();
   const all = (sql: string, params: unknown[] = []): Row[] => db.prepare(sql).all(...params) as Row[];
   const recentIso = new Date(Date.now() - RECENT_MS).toISOString();
   const conflictSinceIso = new Date(Date.now() - CONFLICT_WINDOW_MS).toISOString();

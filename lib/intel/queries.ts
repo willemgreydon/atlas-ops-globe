@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { getReadDb } from "./db";
 
 /**
  * Read/query layer for the intelligence API. Every list is paginated and every
@@ -66,7 +66,7 @@ export function listEvents(p: PageParams, f: Filters = {}): Page<Record<string, 
       country_code AS countryCode, source, source_url AS sourceUrl, confidence, tags
     FROM events ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY occurred_at DESC LIMIT ? OFFSET ?`;
-  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  const rows = getReadDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
   for (const r of rows) r.tags = parseJson(r.tags, []);
   return page(rows, p);
 }
@@ -79,7 +79,7 @@ export function listNews(p: PageParams, f: Filters = {}): Page<Record<string, un
   const sql = `SELECT id, title, url, source, publisher, published_at AS publishedAt, country_code AS countryCode,
       story_id AS storyId FROM news_articles ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY published_at DESC LIMIT ? OFFSET ?`;
-  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  const rows = getReadDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
   return page(rows, p);
 }
 
@@ -92,14 +92,14 @@ export function listVulnerabilities(p: PageParams, opts: { kevOnly?: boolean; si
       published_at AS publishedAt, cwe, source FROM vulnerabilities
     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY (kev_date_added IS NULL), kev_date_added DESC, published_at DESC LIMIT ? OFFSET ?`;
-  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  const rows = getReadDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
   for (const r of rows) { r.cwe = parseJson(r.cwe, []); r.kev = r.kev === 1; }
   return page(rows, p);
 }
 
 export function listSpace(p: PageParams): Page<Record<string, unknown>> {
   // Objects with TLEs first — only those can be propagated on the globe.
-  const rows = getDb().prepare(
+  const rows = getReadDb().prepare(
     `SELECT id, norad, cospar, name, object_type AS objectType, country, operator,
        inclination_deg AS inclinationDeg, period_min AS periodMin, apogee_km AS apogeeKm,
        perigee_km AS perigeeKm, epoch, tle_line1 AS tle1, tle_line2 AS tle2, source
@@ -109,7 +109,7 @@ export function listSpace(p: PageParams): Page<Record<string, unknown>> {
 }
 
 export function listCountries(p: PageParams): Page<Record<string, unknown>> {
-  const rows = getDb().prepare(
+  const rows = getReadDb().prepare(
     "SELECT iso2, iso3, name, region, capital, lat, lon FROM countries ORDER BY name LIMIT ? OFFSET ?",
   ).all(p.limit, p.offset) as Record<string, unknown>[];
   return page(rows, p);
@@ -123,7 +123,7 @@ export function listSanctions(p: PageParams, f: { q?: string; type?: string } = 
   const sql = `SELECT id, subject_type AS subjectType, name, program, authority, jurisdiction
     FROM sanctions ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY name LIMIT ? OFFSET ?`;
-  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  const rows = getReadDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
   return page(rows, p);
 }
 
@@ -132,7 +132,7 @@ const asWikiUrl = (v: unknown): string | undefined =>
   typeof v === "string" && v.startsWith("http") ? v : undefined;
 
 export function listPersons(p: PageParams): Page<Record<string, unknown>> {
-  const rows = getDb().prepare(
+  const rows = getReadDb().prepare(
     `SELECT id, canonical_name AS name, mention_count AS mentions, wikidata_id AS wiki, countries
      FROM persons ORDER BY mention_count DESC, canonical_name LIMIT ? OFFSET ?`,
   ).all(p.limit, p.offset) as Record<string, unknown>[];
@@ -141,7 +141,7 @@ export function listPersons(p: PageParams): Page<Record<string, unknown>> {
 }
 
 export function listOrganizations(p: PageParams): Page<Record<string, unknown>> {
-  const rows = getDb().prepare(
+  const rows = getReadDb().prepare(
     `SELECT id, canonical_name AS name, mention_count AS mentions, wikidata_id AS wiki, country_code AS countryCode
      FROM organizations ORDER BY mention_count DESC, canonical_name LIMIT ? OFFSET ?`,
   ).all(p.limit, p.offset) as Record<string, unknown>[];
@@ -151,7 +151,7 @@ export function listOrganizations(p: PageParams): Page<Record<string, unknown>> 
 
 export function listMarkets(p: PageParams): Page<Record<string, unknown>> {
   // Indices first, then equities — a stable ticker order.
-  const rows = getDb().prepare(
+  const rows = getReadDb().prepare(
     `SELECT id, symbol, name, asset_class AS assetClass, value AS price, change, change_pct AS changePct,
        currency, latency_class AS latencyClass, ts, provider FROM market_observations
      ORDER BY CASE asset_class WHEN 'index' THEN 0 WHEN 'equity' THEN 1 ELSE 2 END, symbol LIMIT ? OFFSET ?`,
@@ -167,7 +167,7 @@ export function listWeather(p: PageParams, f: { variable?: string; bbox?: [numbe
   const sql = `SELECT id, lat, lon, place, country_code AS countryCode, observed_at AS observedAt,
       variable, value, unit, provider FROM weather_observations
     WHERE ${where.join(" AND ")} ORDER BY place LIMIT ? OFFSET ?`;
-  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  const rows = getReadDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
   return page(rows, p);
 }
 
@@ -179,12 +179,12 @@ export function listVessels(p: PageParams, f: { bbox?: [number, number, number, 
       course AS courseDeg, nav_status AS navigationStatus, destination, eta, last_contact AS lastContact
     FROM vessels ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY last_contact DESC LIMIT ? OFFSET ?`;
-  const rows = getDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
+  const rows = getReadDb().prepare(sql).all(...(args as never[]), p.limit, p.offset) as Record<string, unknown>[];
   return page(rows, p);
 }
 
 export function getCountryProfile(code: string): Record<string, unknown> | null {
-  const db = getDb();
+  const db = getReadDb();
   const iso = code.toUpperCase();
   const country = db.prepare(
     "SELECT iso2, iso3, name, region, capital, lat, lon FROM countries WHERE iso2 = ? OR iso3 = ?",
@@ -209,7 +209,7 @@ export function getCountryProfile(code: string): Record<string, unknown> | null 
  * these provenance rows → provider record → source.
  */
 export function listProvenance(subjectId: string): Record<string, unknown>[] {
-  return getDb().prepare(
+  return getReadDb().prepare(
     `SELECT provider, dataset, provider_record_id AS providerRecordId, source_url AS sourceUrl,
        observed_at AS observedAt, published_at AS publishedAt, retrieved_at AS retrievedAt,
        license, attribution, raw_hash AS rawHash, pipeline, pipeline_version AS pipelineVersion,
@@ -222,5 +222,5 @@ export function fullTextSearch(table: "fts_news" | "fts_events", query: string, 
   // FTS5 MATCH; sanitize to a prefix-safe token query.
   const safe = query.replace(/["']/g, " ").trim();
   if (!safe) return [];
-  return getDb().prepare(`SELECT id, title FROM ${table} WHERE ${table} MATCH ? LIMIT ?`).all(`${safe}*`, limit) as Record<string, unknown>[];
+  return getReadDb().prepare(`SELECT id, title FROM ${table} WHERE ${table} MATCH ? LIMIT ?`).all(`${safe}*`, limit) as Record<string, unknown>[];
 }

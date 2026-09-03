@@ -26,6 +26,7 @@
     "intel:validate": "tsx bin/intel.ts validate",
     "intel:index": "tsx bin/intel.ts index",
     "db:seed-turso": "tsx scripts/seed-turso.ts",
+    "db:snapshot": "tsx scripts/build-vault-snapshot.ts",
     "sync:aircraft": "tsx scripts/sync-aircraft.ts",
     "postinstall": "node scripts/copy-cesium.mjs"
   },

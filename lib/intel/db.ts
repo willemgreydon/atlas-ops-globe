@@ -1,5 +1,5 @@
 import Database from "libsql";
-import { mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { runMigrations } from "./migrations";
 
@@ -123,6 +123,63 @@ export function getDb(): Db {
   return db;
 }
 
+/**
+ * Path to the read-only vault snapshot bundled with the deploy (shipped into the
+ * serverless function via next.config `outputFileTracingIncludes`). It's the
+ * fallback the read path serves when Turso can't be read — the free-tier read
+ * quota is blocked (403), or a cold replica hasn't pulled — so analytics/vault
+ * panels stay up (data frozen at snapshot time) instead of degrading to empty.
+ */
+export function snapshotPath(): string {
+  return process.env.INTEL_SNAPSHOT_PATH || resolve(process.cwd(), "data", "vault-snapshot.db");
+}
+
+let readHandle: Db | null = null;
+let snapHandle: Db | null = null;
+
+function openSnapshot(): Db {
+  const src = snapshotPath();
+  // libsql has no read-only open mode and Vercel's deployment FS is read-only,
+  // so copy the bundled snapshot into the one writable dir (/tmp) once and open
+  // it there. Locally the file is already writable in place.
+  let path = src;
+  if (process.env.VERCEL) {
+    path = process.env.INTEL_SNAPSHOT_REPLICA || "/tmp/atlas-vault-snapshot.db";
+    if (!existsSync(path)) copyFileSync(src, path);
+  }
+  const db = new Libsql(path);
+  applyPragmas(db);
+  return db;
+}
+
+/**
+ * DB handle for READ-ONLY route handlers. Prefers the live source (a local file
+ * in dev, the Turso embedded replica on Vercel); if that source can't actually
+ * be read — the free-tier read quota is blocked (403), or a cold replica failed
+ * to pull — it transparently falls back to the bundled read-only snapshot. This
+ * decouples read availability from Turso's read quota: analytics/vault panels
+ * stay up (frozen at snapshot time) and return to live automatically once reads
+ * are unblocked. NEVER use for writes — the fallback is a read-only snapshot.
+ */
+export function getReadDb(): Db {
+  if (readHandle) return readHandle;
+  try {
+    const db = getDb();
+    // Probe a core table. A blocked/cold Turso replica throws here (403 pull or
+    // missing schema); a healthy local file or warm replica returns instantly.
+    // An empty-but-migrated table returns undefined without throwing — that's a
+    // live DB with no rows, not an outage, so we keep serving it.
+    db.prepare("SELECT 1 FROM countries LIMIT 1").get();
+    readHandle = db;
+    return readHandle;
+  } catch {
+    /* live vault unreadable — fall back to the bundled snapshot below */
+  }
+  if (!snapHandle) snapHandle = openSnapshot();
+  readHandle = snapHandle;
+  return readHandle;
+}
+
 /** Run migrations against the current handle — used by the CLI/seed on Turso. */
 export function ensureMigrated(): number {
   return runMigrations(getDb());
@@ -142,6 +199,9 @@ export function openMemoryDb(): Db {
 }
 
 export function closeDb(): void {
+  if (snapHandle && snapHandle !== handle) snapHandle.close();
   handle?.close();
   handle = null;
+  readHandle = null;
+  snapHandle = null;
 }
