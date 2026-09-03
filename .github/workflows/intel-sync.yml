@@ -49,17 +49,18 @@ jobs:
           if [ -n "${{ github.event.inputs.domains }}" ]; then
             echo "domains=${{ github.event.inputs.domains }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "30 4 * * *" ]; then
-            # Heavy daily: the domains that actually change (satellite TLEs age in
-            # ~2 days; ACLED adds conflict events). Near-static reference data
-            # (sanctions ~19k, cyber, economics) is intentionally OFF-schedule —
-            # re-pushing it churns replicas and burns Turso reads for no benefit;
+            # Heavy daily: satellite TLEs age in ~2 days. Near-static reference
+            # data (sanctions ~19k, cyber, economics) is intentionally OFF-schedule
+            # — re-pushing it churns replicas and burns Turso reads for no benefit;
             # refresh it manually when needed.
-            echo "domains=space conflict" >> "$GITHUB_OUTPUT"
+            echo "domains=space" >> "$GITHUB_OUTPUT"
           else
             # Light: news (keeps the persons/orgs entity graph → Trending Entities
-            # fresh) + disasters (global snapshot count). markets/weather/events
-            # are served live-at-request, so they need no vault sync.
-            echo "domains=news disasters" >> "$GITHUB_OUTPUT"
+            # fresh) + disasters (global snapshot count) + conflict (keyless GDELT
+            # baseline → Observatory Risk index & globe conflict layer; GDELT is
+            # unreachable from Vercel so it can't be live-at-request). markets/
+            # weather/events are served live-at-request, so they need no sync.
+            echo "domains=news disasters conflict" >> "$GITHUB_OUTPUT"
           fi
       - name: Sync vault
         run: pnpm intel sync ${{ steps.pick.outputs.domains }}
