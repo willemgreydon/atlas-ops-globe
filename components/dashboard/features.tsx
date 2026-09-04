@@ -3,7 +3,8 @@ import { useMemo, useState } from "react";
 import type { DashPayload, DashScore } from "@/stores/app-store";
 import {
   describe, zScores, percentileRanks, gini, hhi, cosineSimilarity, correlationMatrix,
-  paretoFrontier, kMeans, weightedScore,
+  paretoFrontier, kMeans, weightedScore, rankCorrelationMatrix, linearRegression, shape,
+  normalizedEntropy, normalize, pearson,
 } from "@/lib/intel/analytics";
 import { Scatter, Radar, Heatmap, Histogram, Bars, Network, type Pt, type NetEdge } from "./charts";
 
@@ -207,6 +208,112 @@ export function RegionalRollup({ data }: { data: DashPayload }) {
   );
 }
 
+/* Spearman rank-correlation matrix — monotonic dependency, robust to the heavy
+ * skew in raw counts (a complement to the Pearson dependency matrix). */
+export function RankCorrelationHeatmap({ data }: { data: DashPayload }) {
+  const { keys, matrix, labels } = useMemo(() => {
+    const vectors: Record<string, number[]> = {};
+    const labels: Record<string, string> = {};
+    for (const s of SIGNALS) { vectors[s.k as string] = vec(data.scores, s.k); labels[s.k as string] = s.l; }
+    return { ...rankCorrelationMatrix(vectors), labels };
+  }, [data]);
+  return (
+    <Panel title="Rank-dependency matrix" sub="Spearman ρ">
+      <Heatmap keys={keys} matrix={matrix} labels={labels} />
+      <p className="obs-note">Spearman ranks the values first, so it catches monotonic links that raw-count Pearson misses when a few countries dominate a signal.</p>
+    </Panel>
+  );
+}
+
+/* Bivariate OLS regression explorer: pick any X and Y signal → fitted line, R²,
+ * Pearson r and slope, over min-max-normalised axes so every pair is comparable. */
+export function RegressionExplorer({ data }: { data: DashPayload }) {
+  const [xk, setXk] = useState<keyof DashScore>("reachPop");
+  const [yk, setYk] = useState<keyof DashScore>("risk");
+  const { points, fit, r, r2, n } = useMemo(() => {
+    const xs = normalize(vec(data.scores, xk)).map((v) => v * 100);
+    const ys = normalize(vec(data.scores, yk)).map((v) => v * 100);
+    const reg = linearRegression(xs, ys);
+    const points: Pt[] = data.scores.map((s, i) => ({ x: xs[i], y: ys[i], label: s.name }));
+    return { points, fit: { slope: reg.slope, intercept: reg.intercept }, r: pearson(xs, ys), r2: reg.r2, n: points.length };
+  }, [data, xk, yk]);
+  const xl = SIGNALS.find((s) => s.k === xk)?.l ?? String(xk);
+  const yl = SIGNALS.find((s) => s.k === yk)?.l ?? String(yk);
+  return (
+    <Panel title="Regression explorer" sub="OLS fit · R²" wide>
+      <div className="reg-pick">
+        <label>X <select value={xk as string} onChange={(e) => setXk(e.target.value as keyof DashScore)}>{SIGNALS.map((s) => <option key={s.k as string} value={s.k as string}>{s.l}</option>)}</select></label>
+        <label>Y <select value={yk as string} onChange={(e) => setYk(e.target.value as keyof DashScore)}>{SIGNALS.map((s) => <option key={s.k as string} value={s.k as string}>{s.l}</option>)}</select></label>
+        <span className="reg-stat">R² <b>{r2.toFixed(2)}</b></span>
+        <span className="reg-stat">r <b className={r >= 0 ? "up" : "down"}>{r.toFixed(2)}</b></span>
+        <span className="reg-stat">slope <b>{fit.slope.toFixed(2)}</b></span>
+        <span className="reg-stat">n <b>{n}</b></span>
+      </div>
+      <Scatter points={points} fit={fit} quadrant={false} xLabel={xl} yLabel={yl} />
+      <p className="obs-note">Both axes min-max normalised to 0–100. The line is the ordinary-least-squares fit; R² is the share of Y’s variance it explains. Correlation is not causation.</p>
+    </Panel>
+  );
+}
+
+/* Full descriptive-statistics table across every signal: centre, spread, shape. */
+export function MetricStatsTable({ data }: { data: DashPayload }) {
+  const rows = useMemo(() => SIGNALS.map((s) => {
+    const v = vec(data.scores, s.k);
+    const st = describe(v);
+    const sh = shape(v);
+    return { label: s.l, mean: st.mean, std: st.std, cv: sh.cv, skew: sh.skew, kurt: sh.kurt, iqr: st.q3 - st.q1, max: st.max };
+  }), [data]);
+  const f = (n: number) => (Math.abs(n) >= 1000 ? fmtBig(n) : n.toFixed(Math.abs(n) < 10 ? 2 : 1));
+  return (
+    <Panel title="Descriptive statistics" sub="centre · spread · shape" wide>
+      <div className="table-scroll">
+        <table className="mini-table stats-table">
+          <thead><tr><th>Signal</th><th>μ</th><th>σ</th><th>CV</th><th>skew</th><th>kurt</th><th>IQR</th><th>max</th></tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.label}>
+              <td>{r.label}</td><td>{f(r.mean)}</td><td>{f(r.std)}</td>
+              <td>{r.cv.toFixed(2)}</td>
+              <td className={r.skew > 0.5 ? "up" : r.skew < -0.5 ? "down" : ""}>{r.skew.toFixed(2)}</td>
+              <td>{r.kurt.toFixed(2)}</td><td>{f(r.iqr)}</td><td>{f(r.max)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <p className="obs-note">CV = σ/μ (relative dispersion). Skew &gt; 0 = a long right tail (a few extreme countries); excess kurtosis &gt; 0 = fatter tails than a normal distribution.</p>
+    </Panel>
+  );
+}
+
+/* Tail concentration: how much of each signal's total the top decile of countries holds. */
+export function TailConcentration({ data }: { data: DashPayload }) {
+  const rows = useMemo(() => SIGNALS.map((s) => {
+    const v = vec(data.scores, s.k).filter((x) => x > 0).sort((a, b) => b - a);
+    const total = v.reduce((a, b) => a + b, 0);
+    const k = Math.max(1, Math.ceil(v.length * 0.1));
+    const topShare = total > 0 ? (v.slice(0, k).reduce((a, b) => a + b, 0) / total) * 100 : 0;
+    return { label: s.l, value: Math.round(topShare), gini: gini(v) };
+  }).sort((a, b) => b.value - a.value), [data]);
+  return (
+    <Panel title="Tail concentration" sub="top-decile share of total">
+      <Bars items={rows.map((r) => ({ label: r.label, value: r.value, hint: `Gini ${r.gini.toFixed(2)}` }))} max={100} unit="%" tone="risk" />
+      <p className="obs-note">Share of a signal’s world total held by its top 10% of countries. 100% = one bloc owns it all; hover for the Gini coefficient.</p>
+    </Panel>
+  );
+}
+
+/* Signal evenness: normalised Shannon entropy — how evenly a signal spreads across countries. */
+export function SignalEntropy({ data }: { data: DashPayload }) {
+  const rows = useMemo(() => SIGNALS.map((s) => ({
+    label: s.l, value: Math.round(normalizedEntropy(vec(data.scores, s.k)) * 100),
+  })).sort((a, b) => b.value - a.value), [data]);
+  return (
+    <Panel title="Signal evenness" sub="normalised entropy">
+      <Bars items={rows.map((r) => ({ label: r.label, value: r.value, hint: `${r.value}% of max evenness` }))} max={100} unit="%" tone="info" />
+      <p className="obs-note">100% = perfectly even across all countries; low = concentrated in a handful. The mirror image of tail concentration.</p>
+    </Panel>
+  );
+}
+
 /* 19 & 21. Compare 2–4 countries: overlaid radars + full signal table, best-in-row highlighted. */
 export function CompareCountries({ data }: { data: DashPayload }) {
   const named = useMemo(() => [...data.scores].sort((a, b) => b.risk + b.opportunity - a.risk - a.opportunity), [data]);
@@ -337,10 +444,11 @@ export function EntityNetwork({ data }: { data: DashPayload }) {
   }
   const nodes = g.nodes.map((n) => ({ id: n.id, label: label(n.name), weight: n.degree, kind: n.kind }));
   const edges: NetEdge[] = g.edges.map((e) => ({ a: e.a, b: e.b }));
+  // Larger canvas for the full connected core so the dense ring has room to breathe.
   return (
     <Panel title="Entity relationship network" sub={`${g.nodes.length} nodes · ${g.edges.length} links`} wide>
-      <Network nodes={nodes} edges={edges} legend />
-      <p className="obs-note">The real relationship graph from the vault. Node size = degree centrality; colour = entity type. Hover an entity to trace only its links.</p>
+      <Network nodes={nodes} edges={edges} size={g.nodes.length > 80 ? 560 : 400} legend />
+      <p className="obs-note">The real relationship graph from the vault — the {g.nodes.length} most-connected entities and every actual link between them. Node size = degree centrality; colour = entity type. Hover an entity to trace only its links.</p>
     </Panel>
   );
 }

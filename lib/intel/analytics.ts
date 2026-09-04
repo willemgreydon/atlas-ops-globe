@@ -417,3 +417,64 @@ export function weightedScore(norms: Record<string, number>, weights: Record<str
   for (const k of Object.keys(weights)) { num += (norms[k] ?? 0) * weights[k]; den += Math.abs(weights[k]); }
   return den === 0 ? 0 : Math.round(Math.max(0, Math.min(1, num / den)) * 100);
 }
+
+/** Fractional ranks (1..n, ties share the average rank) — basis for Spearman. */
+export function ranks(values: number[]): number[] {
+  const order = values.map((v, i) => [v, i] as [number, number]).sort((a, b) => a[0] - b[0]);
+  const r = new Array<number>(values.length).fill(0);
+  let i = 0;
+  while (i < order.length) {
+    let j = i;
+    while (j + 1 < order.length && order[j + 1][0] === order[i][0]) j++;
+    const avg = (i + j) / 2 + 1; // 1-based average rank across the tie group
+    for (let k = i; k <= j; k++) r[order[k][1]] = avg;
+    i = j + 1;
+  }
+  return r;
+}
+
+/** Spearman rank correlation ρ — Pearson computed on the ranks (monotonic, robust to outliers). */
+export function spearman(xs: number[], ys: number[]): number {
+  return pearson(ranks(xs), ranks(ys));
+}
+
+/** Spearman matrix mirroring correlationMatrix()'s shape. */
+export function rankCorrelationMatrix(vectors: Record<string, number[]>): { keys: string[]; matrix: number[][] } {
+  const keys = Object.keys(vectors);
+  const matrix = keys.map((k1) => keys.map((k2) => (k1 === k2 ? 1 : Math.round(spearman(vectors[k1], vectors[k2]) * 100) / 100)));
+  return { keys, matrix };
+}
+
+/** Ordinary least-squares fit y = slope·x + intercept, with coefficient of determination R². */
+export function linearRegression(xs: number[], ys: number[]): { slope: number; intercept: number; r2: number } {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return { slope: 0, intercept: 0, r2: 0 };
+  const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxx = 0, sxy = 0, syy = 0;
+  for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; }
+  const slope = sxx === 0 ? 0 : sxy / sxx;
+  return { slope, intercept: my - slope * mx, r2: sxx === 0 || syy === 0 ? 0 : (sxy * sxy) / (sxx * syy) };
+}
+
+/** Higher moments: skewness, excess kurtosis, and coefficient of variation (σ/μ). */
+export function shape(values: number[]): { skew: number; kurt: number; cv: number } {
+  const n = values.length;
+  if (n < 3) return { skew: 0, kurt: 0, cv: 0 };
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const m2 = values.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  const s = Math.sqrt(m2);
+  if (s === 0) return { skew: 0, kurt: 0, cv: 0 };
+  const m3 = values.reduce((a, b) => a + (b - mean) ** 3, 0) / n;
+  const m4 = values.reduce((a, b) => a + (b - mean) ** 4, 0) / n;
+  return { skew: m3 / s ** 3, kurt: m4 / s ** 4 - 3, cv: mean === 0 ? 0 : s / mean };
+}
+
+/** Shannon entropy of a non-negative distribution, normalised to 0..1 (÷ log₂ n)
+ *  so concentration is comparable across signals: 1 = perfectly even, 0 = a single actor. */
+export function normalizedEntropy(values: number[]): number {
+  const xs = values.filter((v) => v > 0);
+  const sum = xs.reduce((a, b) => a + b, 0);
+  if (xs.length <= 1 || sum === 0) return 0;
+  const h = -xs.reduce((a, v) => { const p = v / sum; return a + p * Math.log2(p); }, 0);
+  return h / Math.log2(xs.length);
+}

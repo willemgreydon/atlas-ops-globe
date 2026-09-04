@@ -724,6 +724,11 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .feat-grid > .obs-panel.wide { column-span: all; }
 @media (max-width: 900px) { .feat-grid { columns: 1; } }
 @media (min-width: 1500px) { .feat-grid { columns: 3; } }
+/* Two graphs side-by-side: break out of the masonry columns, then a 2-col grid. */
+.obs-graph-row { column-span: all; break-inside: avoid; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 12px; }
+.obs-graph-row > .obs-panel { width: 100%; margin: 0; }
+.obs-graph-row .chart.net { max-width: 100%; }
+@media (max-width: 1100px) { .obs-graph-row { grid-template-columns: 1fr; } }
 .mb { margin-bottom: 10px; }
 .seg.small.wrap { flex-wrap: wrap; gap: 3px; }
 .up { color: var(--accent); } .down { color: var(--critical); }
@@ -740,6 +745,7 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .chart .frontier { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 4 3; opacity: 0.8; }
 .chart .pt { cursor: pointer; transition: r .1s; }
 .chart .pt-front { stroke: var(--accent); stroke-width: 1.5; }
+.chart .fit-line { stroke: var(--accent); stroke-width: 1.6; opacity: 0.85; }
 .chart .tip-t { fill: var(--text); font: 700 12px var(--sans); }
 .chart .tip-s { fill: var(--muted); font: 10px var(--mono); }
 .chart .bar { fill: rgba(101,246,199,0.5); }
@@ -785,6 +791,14 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .rank li b { font: 700 12px var(--mono); color: var(--text); }
 .stat-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 11px; color: var(--muted); }
 .stat-row b { color: var(--text); font: 700 12px var(--mono); }
+/* Regression explorer controls: X/Y pickers + inline fit statistics. */
+.reg-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 11px; color: var(--muted); }
+.reg-pick label { display: inline-flex; align-items: center; gap: 5px; text-transform: uppercase; letter-spacing: 0.08em; }
+.reg-pick select { padding: 4px 7px; }
+.reg-stat { margin-left: 2px; }
+.reg-stat b { color: var(--text); font: 700 12px var(--mono); margin-left: 3px; }
+.stats-table td { font: 12px var(--mono); }
+.stats-table th:not(:first-child), .stats-table td:not(:first-child) { text-align: right; }
 .k-mean { color: var(--accent); } .k-median { color: var(--info); }
 
 /* tables */

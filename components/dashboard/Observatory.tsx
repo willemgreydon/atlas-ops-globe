@@ -6,6 +6,7 @@ import {
   RiskAdjusted, ExpectedImpact, CompoundRisk, RegionalRollup, CompareCountries,
   PercentileProfile, PeerBenchmark, SimilarCountries, EntityNetwork, SignalDependencyGraph,
   EntityLeaderboard, OrgCountryFlows, ConcentrationPanel, DataTable, MethodPanel,
+  RankCorrelationHeatmap, RegressionExplorer, MetricStatsTable, TailConcentration, SignalEntropy,
 } from "./features";
 
 type Persona = "all" | "political" | "finance" | "marketing";
@@ -76,13 +77,18 @@ export default function Observatory() {
       {tab === "explore" && (
         <div className="feat-grid">
           <QuadrantScatter data={data} />
+          <RegressionExplorer data={data} />
           <WeightBuilder data={data} />
           <CorrelationHeatmap data={data} />
+          <RankCorrelationHeatmap data={data} />
           <DistributionPanel data={data} />
+          <MetricStatsTable data={data} />
           <RiskAdjusted data={data} />
           <ExpectedImpact data={data} />
           <OutlierBoard data={data} />
           <CompoundRisk data={data} />
+          <TailConcentration data={data} />
+          <SignalEntropy data={data} />
           <RegionalRollup data={data} />
         </div>
       )}
@@ -98,8 +104,10 @@ export default function Observatory() {
 
       {tab === "network" && (
         <div className="feat-grid">
-          <EntityNetwork data={data} />
-          <SignalDependencyGraph data={data} />
+          <div className="obs-graph-row">
+            <EntityNetwork data={data} />
+            <SignalDependencyGraph data={data} />
+          </div>
           <EntityLeaderboard data={data} />
           <OrgCountryFlows data={data} />
           <ConcentrationPanel data={data} />

@@ -6,20 +6,30 @@ const PAD = 34;
 
 export interface Pt { x: number; y: number; label: string; group?: number; frontier?: boolean; }
 
-/** Scatter with quadrant guides, optional Pareto-frontier line and cluster colours. */
-export function Scatter({ points, w = 540, h = 380, xLabel = "x", yLabel = "y", colors, showFrontier }: {
+/** Scatter with quadrant guides, optional Pareto-frontier line, OLS fit line and cluster colours. */
+export function Scatter({ points, w = 540, h = 380, xLabel = "x", yLabel = "y", colors, showFrontier, fit, quadrant = true }: {
   points: Pt[]; w?: number; h?: number; xLabel?: string; yLabel?: string; colors?: string[]; showFrontier?: boolean;
+  fit?: { slope: number; intercept: number }; quadrant?: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const px = (x: number) => PAD + (x / 100) * (w - PAD * 1.4);
   const py = (y: number) => h - PAD - (y / 100) * (h - PAD * 1.6);
   const front = showFrontier ? points.filter((p) => p.frontier).sort((a, b) => a.x - b.x) : [];
+  // Clip the regression line to the 0..100 viewport on both axes.
+  const fitLine = (() => {
+    if (!fit) return null;
+    const yAt = (x: number) => fit.slope * x + fit.intercept;
+    const pts: [number, number][] = [];
+    for (const x of [0, 100]) { const y = yAt(x); if (y >= 0 && y <= 100) pts.push([x, y]); }
+    for (const y of [0, 100]) { if (fit.slope !== 0) { const x = (y - fit.intercept) / fit.slope; if (x >= 0 && x <= 100) pts.push([x, y]); } }
+    return pts.length >= 2 ? pts.slice(0, 2) : null;
+  })();
   return (
     <svg className="chart" viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`${yLabel} vs ${xLabel}`}>
       {/* quadrant guides at the 50 midlines */}
-      <line x1={px(50)} y1={py(0)} x2={px(50)} y2={py(100)} className="grid" />
-      <line x1={px(0)} y1={py(50)} x2={px(100)} y2={py(50)} className="grid" />
-      <rect x={px(0)} y={py(100)} width={px(50) - px(0)} height={py(0) - py(50)} className="quad-good" />
+      {quadrant && <line x1={px(50)} y1={py(0)} x2={px(50)} y2={py(100)} className="grid" />}
+      {quadrant && <line x1={px(0)} y1={py(50)} x2={px(100)} y2={py(50)} className="grid" />}
+      {quadrant && <rect x={px(0)} y={py(100)} width={px(50) - px(0)} height={py(0) - py(50)} className="quad-good" />}
       {/* axes */}
       <line x1={px(0)} y1={py(0)} x2={px(100)} y2={py(0)} className="axis" />
       <line x1={px(0)} y1={py(0)} x2={px(0)} y2={py(100)} className="axis" />
@@ -27,6 +37,9 @@ export function Scatter({ points, w = 540, h = 380, xLabel = "x", yLabel = "y", 
       <text x={10} y={py(50)} className="axis-lbl" transform={`rotate(-90 10 ${py(50)})`} textAnchor="middle">{yLabel} →</text>
       {showFrontier && front.length > 1 && (
         <polyline className="frontier" points={front.map((p) => `${px(p.x)},${py(p.y)}`).join(" ")} />
+      )}
+      {fitLine && (
+        <line className="fit-line" x1={px(fitLine[0][0])} y1={py(fitLine[0][1])} x2={px(fitLine[1][0])} y2={py(fitLine[1][1])} />
       )}
       {points.map((p, i) => (
         <circle key={i} cx={px(p.x)} cy={py(p.y)} r={hover === i ? 6 : p.frontier ? 4.5 : 3.5}
@@ -164,7 +177,16 @@ export function Network({ nodes, edges, size = 360, legend }: {
 }) {
   const [hover, setHover] = useState<number | null>(null);
   if (nodes.length === 0) return <div className="obs-empty small">no graph data</div>;
-  const c = size / 2, r = c - 48;
+  // Density-adaptive geometry so the ring stays legible from ~6 up to ~200 nodes:
+  // as the count climbs, shrink node radii, thin strokes, and pull the ring out
+  // to use more of the canvas (labels are hover-only when dense, so less margin).
+  const N = nodes.length;
+  const dense = N > 80, mid = N > 40;
+  const margin = dense ? 22 : mid ? 34 : 48;
+  const c = size / 2, r = c - margin;
+  const rBase = dense ? 1.6 : mid ? 3 : 4, rGain = dense ? 4 : mid ? 7 : 9;
+  const nodeStroke = dense ? 0.6 : 1.5;
+  const labelCut = dense ? 0.82 : 0.62; // only the strongest nodes carry a resting label
   const maxW = Math.max(1, ...nodes.map((n) => n.weight));
   const maxE = Math.max(1, ...edges.map((e) => e.w ?? 1));
   // Ring order: cluster same-kind nodes together, strongest first within a kind.
@@ -187,19 +209,19 @@ export function Network({ nodes, edges, size = 360, legend }: {
           const hot = hover != null && (e.a === hover || e.b === hover);
           const dim = hover != null && !hot;
           const rgb = e.tone === "pos" ? "101,246,199" : e.tone === "neg" ? "255,90,98" : "170,190,210";
-          const base = e.tone ? 0.16 + 0.62 * ((e.w ?? 1) / maxE) : 0.12;
+          const base = (e.tone ? 0.16 + 0.62 * ((e.w ?? 1) / maxE) : 0.12) * (dense ? 0.7 : 1);
           return (
             <line key={i} x1={pos[e.a][0]} y1={pos[e.a][1]} x2={pos[e.b][0]} y2={pos[e.b][1]}
-              style={{ stroke: `rgba(${rgb},${dim ? 0.04 : hot ? 0.7 : base})`, strokeWidth: (hot ? 1.6 : 0.6) + ((e.w ?? 1) / maxE) * 2.2 }} />
+              style={{ stroke: `rgba(${rgb},${dim ? 0.03 : hot ? 0.75 : base})`, strokeWidth: (hot ? 1.6 : dense ? 0.35 : 0.6) + ((e.w ?? 1) / maxE) * (dense ? 1.4 : 2.2) }} />
           );
         })}
         {nodes.map((n, i) => {
           const active = hover == null || hover === i || neighbours.has(i);
           return (
             <g key={n.id} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} style={{ cursor: "pointer" }}>
-              <circle cx={pos[i][0]} cy={pos[i][1]} r={4 + (n.weight / maxW) * 9}
-                style={{ fill: kindColor(n.kind), opacity: active ? 1 : 0.25, stroke: "var(--bg)", strokeWidth: 1.5 }} />
-              {(hover === i || neighbours.has(i) || (hover == null && n.weight / maxW > 0.62)) && (
+              <circle cx={pos[i][0]} cy={pos[i][1]} r={rBase + (n.weight / maxW) * rGain}
+                style={{ fill: kindColor(n.kind), opacity: active ? 1 : 0.22, stroke: "var(--bg)", strokeWidth: nodeStroke }} />
+              {(hover === i || neighbours.has(i) || (hover == null && n.weight / maxW > labelCut)) && (
                 <text x={pos[i][0]} y={pos[i][1] - 10} className="node-lbl" textAnchor="middle" style={{ opacity: active ? 1 : 0.3 }}>{n.label}</text>
               )}
             </g>

@@ -106,8 +106,11 @@ function build(): unknown {
     .slice(0, 10);
 
   // Real relationship subgraph: the most-connected N entities and the ACTUAL
-  // edges between them (deduped, undirected) — no synthesised topology.
-  const GRAPH_NODES = 32;
+  // edges between them (deduped, undirected) — no synthesised topology. Show the
+  // full connected core (top-degree, up to this cap) so the network reads as a
+  // dense god-tier graph rather than a sparse handful; an edge only appears when
+  // BOTH endpoints are in the set, so a higher cap surfaces far more links.
+  const GRAPH_NODES = 200;
   const topIds = [...degree.entries()].sort((a, b) => b[1] - a[1]).slice(0, GRAPH_NODES).map(([id]) => id);
   const gIndex = new Map(topIds.map((id, i) => [id, i]));
   const graphNodes = topIds.map((id) => {
