@@ -758,11 +758,12 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .net .node.hot { fill: var(--accent); }
 .net .node-lbl { fill: var(--text); font: 10px var(--mono); }
 
-/* heatmap */
-.heatmap { display: grid; gap: 2px; font: 10px var(--mono); }
+/* heatmap — capped like the other square/ring charts so it stays compact and its
+   cells stay square instead of ballooning to column width on wider desktops. */
+.heatmap { display: grid; gap: 2px; font: 10px var(--mono); max-width: 340px; margin-inline: auto; }
 .heatmap .hm-col, .heatmap .hm-row { color: var(--muted); text-align: center; padding: 2px; text-transform: uppercase; }
-.heatmap .hm-row { text-align: right; padding-right: 6px; }
-.heatmap .hm-cell { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border-radius: 3px; color: rgba(255,255,255,0.85); font-size: 9px; min-height: 24px; }
+.heatmap .hm-row { text-align: right; padding-right: 6px; align-self: center; }
+.heatmap .hm-cell { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border-radius: 3px; color: rgba(255,255,255,0.85); font-size: 9px; min-height: 22px; }
 
 /* bars component */
 .bars { list-style: none; margin: 0; padding: 0; }
