@@ -25,7 +25,7 @@ import { LAYER_BY_ID } from "@/lib/config/layers";
 import { MovingLayer, deadReckon, secondsSince } from "./motion";
 import { surfaceQuaternion } from "./orient";
 import { modelUrl } from "@/lib/globe/models/registry";
-import { classifySatellite, classifyAircraft } from "@/lib/globe/models/classify";
+import { classifySatellite } from "@/lib/globe/models/classify";
 
 type SelMap = WeakMap<Entity, NonNullable<Selection>>;
 const KN_TO_MS = 0.514444;
@@ -46,7 +46,6 @@ const KN_TO_MS = 0.514444;
  * into a solid white blob.
  */
 const SAT_MODEL_DISTANCE = 1.5e7;
-const AIRCRAFT_MODEL_DISTANCE = 4.0e5;
 const VESSEL_MODEL_DISTANCE = 3.5e5;
 
 /** On-screen model floor (px). Satellites are sparse so they carry the larger
@@ -98,7 +97,11 @@ export function createAircraftLayer(viewer: Viewer, sel: SelMap, sprite: HTMLCan
       const p = deadReckon(a.position.lon, a.position.lat, a.headingDeg, a.velocityMs, elapsed, 30);
       return { lon: p.lon, lat: p.lat, alt: a.position.alt ?? 9000, headingDeg: a.headingDeg };
     },
-    build: (a) => ({
+    // Aircraft render as the 2D billboard sprite at every zoom — NOT a glTF model.
+    // ADS-B traffic is dense (thousands live) and the generated airliner/heli
+    // models overlapped into an unreadable clutter up close, so the model layer is
+    // dropped; the sprite (rotated to heading below) stays legible at any scale.
+    build: () => ({
       billboard: {
         image: sprite,
         scale: 0.9,
@@ -106,13 +109,8 @@ export function createAircraftLayer(viewer: Viewer, sel: SelMap, sprite: HTMLCan
         verticalOrigin: VerticalOrigin.CENTER,
         scaleByDistance: new NearFarScalar(1.0e6, 1.2, 1.5e7, 0.55),
         disableDepthTestDistance: DEPTH_TEST_DISABLE_M,
-        distanceDisplayCondition: new DistanceDisplayCondition(AIRCRAFT_MODEL_DISTANCE, Number.MAX_VALUE),
       },
-      // Archetype chosen per aircraft from its ADS-B kinematics (jet / prop / heli).
-      model: nearModel(modelUrl(classifyAircraft(a)), AIRCRAFT_MODEL_DISTANCE, TRAFFIC_MODEL_MIN_PX),
     }),
-    orient: orientToSurface,
-    orientMaxDistanceM: AIRCRAFT_MODEL_DISTANCE,
     onUpdate: (ent, _a, s) => {
       if (ent.billboard && s.headingDeg != null) {
         ent.billboard.rotation = new ConstantProperty(-CMath.toRadians(s.headingDeg));
