@@ -228,7 +228,9 @@ export function RankCorrelationHeatmap({ data }: { data: DashPayload }) {
 /* Bivariate OLS regression explorer: pick any X and Y signal → fitted line, R²,
  * Pearson r and slope, over min-max-normalised axes so every pair is comparable. */
 export function RegressionExplorer({ data }: { data: DashPayload }) {
-  const [xk, setXk] = useState<keyof DashScore>("reachPop");
+  // Default to the two well-spread 0–100 score signals so the opening view is
+  // legible; count signals (reach/news) are heavy-tailed and bunch under min-max.
+  const [xk, setXk] = useState<keyof DashScore>("opportunity");
   const [yk, setYk] = useState<keyof DashScore>("risk");
   const { points, fit, r, r2, n } = useMemo(() => {
     const xs = normalize(vec(data.scores, xk)).map((v) => v * 100);
@@ -240,7 +242,7 @@ export function RegressionExplorer({ data }: { data: DashPayload }) {
   const xl = SIGNALS.find((s) => s.k === xk)?.l ?? String(xk);
   const yl = SIGNALS.find((s) => s.k === yk)?.l ?? String(yk);
   return (
-    <Panel title="Regression explorer" sub="OLS fit · R²" wide>
+    <Panel title="Regression explorer" sub="OLS fit · R²">
       <div className="reg-pick">
         <label>X <select value={xk as string} onChange={(e) => setXk(e.target.value as keyof DashScore)}>{SIGNALS.map((s) => <option key={s.k as string} value={s.k as string}>{s.l}</option>)}</select></label>
         <label>Y <select value={yk as string} onChange={(e) => setYk(e.target.value as keyof DashScore)}>{SIGNALS.map((s) => <option key={s.k as string} value={s.k as string}>{s.l}</option>)}</select></label>
@@ -265,7 +267,7 @@ export function MetricStatsTable({ data }: { data: DashPayload }) {
   }), [data]);
   const f = (n: number) => (Math.abs(n) >= 1000 ? fmtBig(n) : n.toFixed(Math.abs(n) < 10 ? 2 : 1));
   return (
-    <Panel title="Descriptive statistics" sub="centre · spread · shape" wide>
+    <Panel title="Descriptive statistics" sub="centre · spread · shape">
       <div className="table-scroll">
         <table className="mini-table stats-table">
           <thead><tr><th>Signal</th><th>μ</th><th>σ</th><th>CV</th><th>skew</th><th>kurt</th><th>IQR</th><th>max</th></tr></thead>
@@ -443,12 +445,12 @@ export function EntityNetwork({ data }: { data: DashPayload }) {
     );
   }
   const nodes = g.nodes.map((n) => ({ id: n.id, label: label(n.name), weight: n.degree, kind: n.kind }));
-  const edges: NetEdge[] = g.edges.map((e) => ({ a: e.a, b: e.b }));
+  const edges: NetEdge[] = g.edges.map((e) => ({ a: e.a, b: e.b, w: e.w }));
   // Larger canvas for the full connected core so the dense ring has room to breathe.
   return (
     <Panel title="Entity relationship network" sub={`${g.nodes.length} nodes · ${g.edges.length} links`} wide>
       <Network nodes={nodes} edges={edges} size={g.nodes.length > 80 ? 560 : 400} legend />
-      <p className="obs-note">The real relationship graph from the vault — the {g.nodes.length} most-connected entities and every actual link between them. Node size = degree centrality; colour = entity type. Hover an entity to trace only its links.</p>
+      <p className="obs-note">People, organisations and countries linked where they co-occur in the vault (same article or event); link weight = how often they appear together. Node size = connectedness; colour = entity type. Hover an entity to trace only its links.</p>
     </Panel>
   );
 }

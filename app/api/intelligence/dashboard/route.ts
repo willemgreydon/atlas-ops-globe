@@ -100,33 +100,68 @@ function build(): unknown {
     ent.set(id, { name: str(r.name) || id.replace(/^.*[:/]/, ""), kind: str(r.type) || id.split(":")[0] || "entity", country: str(r.cc) || undefined });
   }
   const nameOf = (id: string) => ent.get(id)?.name || id.replace(/^.*[:/]/, "");
-  const connected = [...degree.entries()]
-    .map(([id, d]) => ({ name: nameOf(id), degree: d, mentions: 0 } as EntityRef))
-    .sort((a, b) => (b.degree ?? 0) - (a.degree ?? 0))
-    .slice(0, 10);
 
-  // Real relationship subgraph: the most-connected N entities and the ACTUAL
-  // edges between them (deduped, undirected) — no synthesised topology. Show the
-  // full connected core (top-degree, up to this cap) so the network reads as a
-  // dense god-tier graph rather than a sparse handful; an edge only appears when
-  // BOTH endpoints are in the set, so a higher cap surfaces far more links.
+  // Entity relationship graph. The vault stores relationships as a BIPARTITE
+  // web — persons/orgs/countries link only to a `news` or `event` hub (MENTIONS /
+  // OCCURRED_IN), never to each other. Rendering that raw makes every entity dangle
+  // off a news node with no person↔org↔country structure. So we PROJECT the
+  // bipartite graph onto the entities: two entities that share a hub (co-mentioned
+  // in the same article, or co-located in the same event) get a direct edge whose
+  // weight = number of shared hubs. Hubs/events themselves are dropped.
+  const kindOf = (id: string) => (ent.get(id)?.kind || id.split(":")[0] || "").toLowerCase();
+  const isEntity = (k: string) => k === "person" || k === "organization" || k === "org" || k === "country";
+  const isHub = (k: string) => k === "news" || k === "event" || k === "story" || k === "news_story";
+  // Group entity members by their shared hub.
+  const hubMembers = new Map<string, Set<string>>();
+  for (const r of rels) {
+    const a = str(r.a), b = str(r.b), ka = kindOf(a), kb = kindOf(b);
+    let hub: string | null = null, member: string | null = null;
+    if (isHub(ka) && isEntity(kb)) { hub = a; member = b; }
+    else if (isHub(kb) && isEntity(ka)) { hub = b; member = a; }
+    if (!hub || !member) continue;
+    (hubMembers.get(hub) ?? hubMembers.set(hub, new Set()).get(hub)!).add(member);
+  }
+  // Co-occurrence weights between entity pairs (skip pathological mega-hubs whose
+  // n² pairs would swamp the graph without adding signal).
+  const coWeight = new Map<string, number>();
+  for (const members of hubMembers.values()) {
+    const arr = [...members];
+    if (arr.length < 2 || arr.length > 40) continue;
+    for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
+      const key = arr[i] < arr[j] ? `${arr[i]}|${arr[j]}` : `${arr[j]}|${arr[i]}`;
+      coWeight.set(key, (coWeight.get(key) ?? 0) + 1);
+    }
+  }
+  // Keep only edges seen in ≥ 2 shared hubs — a single co-mention is noise; a
+  // repeated one is a real association. Rank entities by summed co-occurrence.
+  const CO_MIN = 2;
   const GRAPH_NODES = 200;
-  const topIds = [...degree.entries()].sort((a, b) => b[1] - a[1]).slice(0, GRAPH_NODES).map(([id]) => id);
+  const coDegree = new Map<string, number>();
+  for (const [key, w] of coWeight) {
+    if (w < CO_MIN) continue;
+    const [a, b] = key.split("|");
+    coDegree.set(a, (coDegree.get(a) ?? 0) + w);
+    coDegree.set(b, (coDegree.get(b) ?? 0) + w);
+  }
+  const topIds = [...coDegree.entries()].sort((a, b) => b[1] - a[1]).slice(0, GRAPH_NODES).map(([id]) => id);
   const gIndex = new Map(topIds.map((id, i) => [id, i]));
   const graphNodes = topIds.map((id) => {
     const meta = ent.get(id);
-    return { id, name: nameOf(id), kind: meta?.kind || id.split(":")[0] || "entity", degree: degree.get(id) ?? 0, country: meta?.country };
+    return { id, name: nameOf(id), kind: meta?.kind || id.split(":")[0] || "entity", degree: coDegree.get(id) ?? 0, country: meta?.country };
   });
-  const seenEdge = new Set<string>();
-  const graphEdges: { a: number; b: number; type: string }[] = [];
-  for (const r of rels) {
-    const a = gIndex.get(str(r.a)), b = gIndex.get(str(r.b));
+  const graphEdges: { a: number; b: number; type: string; w: number }[] = [];
+  for (const [key, w] of coWeight) {
+    if (w < CO_MIN) continue;
+    const [ida, idb] = key.split("|");
+    const a = gIndex.get(ida), b = gIndex.get(idb);
     if (a == null || b == null || a === b) continue;
-    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
-    if (seenEdge.has(key)) continue;
-    seenEdge.add(key);
-    graphEdges.push({ a, b, type: str(r.t) });
+    graphEdges.push({ a, b, type: "co-occurrence", w });
   }
+  // "Most connected" = the entities with the strongest co-occurrence footprint
+  // (persons/orgs/countries only — never a news/event hub).
+  const connected: EntityRef[] = graphNodes
+    .slice(0, 10)
+    .map((n) => ({ name: n.name, degree: n.degree, mentions: 0 }));
   const personRefs: EntityRef[] = persons.map((p) => ({ name: str(p.n), mentions: num(p.m) }));
   const orgRefs: EntityRef[] = orgs.map((o) => ({ name: str(o.n), mentions: num(o.m), country: str(o.cc) || undefined }));
 

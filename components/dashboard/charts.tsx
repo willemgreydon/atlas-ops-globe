@@ -209,7 +209,9 @@ export function Network({ nodes, edges, size = 360, legend }: {
           const hot = hover != null && (e.a === hover || e.b === hover);
           const dim = hover != null && !hot;
           const rgb = e.tone === "pos" ? "101,246,199" : e.tone === "neg" ? "255,90,98" : "170,190,210";
-          const base = (e.tone ? 0.16 + 0.62 * ((e.w ?? 1) / maxE) : 0.12) * (dense ? 0.7 : 1);
+          // Weight drives both width and opacity so strong links read at a glance
+          // (signed graphs colour by sign; the entity graph is neutral-toned).
+          const base = (0.1 + (e.tone ? 0.62 : 0.5) * ((e.w ?? 1) / maxE)) * (dense ? 0.75 : 1);
           return (
             <line key={i} x1={pos[e.a][0]} y1={pos[e.a][1]} x2={pos[e.b][0]} y2={pos[e.b][1]}
               style={{ stroke: `rgba(${rgb},${dim ? 0.03 : hot ? 0.75 : base})`, strokeWidth: (hot ? 1.6 : dense ? 0.35 : 0.6) + ((e.w ?? 1) / maxE) * (dense ? 1.4 : 2.2) }} />

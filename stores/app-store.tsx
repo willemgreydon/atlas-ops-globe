@@ -118,7 +118,7 @@ export interface DashPayload {
   };
   graph?: {
     nodes: { id: string; name: string; kind: string; degree: number; country?: string }[];
-    edges: { a: number; b: number; type: string }[];
+    edges: { a: number; b: number; type: string; w?: number }[];
   };
   cyber: { total: number; kev: number; topVendors: { vendor: string; count: number }[] };
   sanctions: { total: number; topAuthorities: { authority: string; count: number }[] };
