@@ -29,12 +29,20 @@ concurrency:
   group: intel-sync
   cancel-in-progress: false
 
+# The snapshot-refresh step commits the regenerated data/vault-snapshot.db back
+# to the branch, so the job needs write access to repo contents.
+permissions:
+  contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Persist the token so the snapshot-commit step can push back.
+          persist-credentials: true
       - uses: pnpm/action-setup@v4
         with:
           version: 11.5.0
@@ -88,3 +96,34 @@ jobs:
           TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
           ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
           NASA_API_KEY: ${{ secrets.NASA_API_KEY }}
+
+      # Refresh the committed read-only vault snapshot — the fallback the app
+      # serves when Turso's free read quota is blocked (see lib/intel/db.ts
+      # getReadDb). The staged sync above leaves the freshly-ingested rows in the
+      # local data/replica.db. NO Turso env here: the script must build from that
+      # LOCAL replica, never re-pull the primary (a pull would burn read quota /
+      # 403 while blocked). If the local replica is complete it fully rebuilds;
+      # if it's a partial fresh-runner replica it overlays only the just-synced
+      # domains onto the existing full snapshot, so reference data stays intact.
+      - name: Refresh vault snapshot
+        run: pnpm db:snapshot
+        env:
+          SNAPSHOT_MERGE_DOMAINS: ${{ steps.pick.outputs.domains }}
+
+      - name: Commit snapshot if changed
+        run: |
+          if git diff --quiet -- data/vault-snapshot.db; then
+            echo "snapshot unchanged — nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/vault-snapshot.db
+          # No [skip ci]: this commit MUST reach Vercel so the deployed function
+          # picks up the fresh snapshot. No push-triggered GitHub workflows exist,
+          # so there's no Actions loop to guard against.
+          git commit -m "chore(intel): refresh vault snapshot" \
+            -m "Domains synced: ${{ steps.pick.outputs.domains }}"
+          # Rebase onto any concurrent pushes, then push back to the same branch.
+          git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
