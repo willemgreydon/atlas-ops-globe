@@ -63,7 +63,9 @@ export default function Observatory() {
 
       {tab === "overview" && (
         <>
+          <SectionLabel title="At a glance" sub="headline signals across every domain" />
           <Kpis data={data} persona={persona} />
+          <SectionLabel title="Priority signals & rankings" sub="what's driving the picture right now" />
           <div className="obs-grid">
             <InsightFeed data={data} persona={persona} />
             <div className="obs-side">
@@ -75,50 +77,68 @@ export default function Observatory() {
       )}
 
       {tab === "explore" && (
-        <div className="feat-grid">
-          <QuadrantScatter data={data} />
-          <RegressionExplorer data={data} />
-          <WeightBuilder data={data} />
-          <CorrelationHeatmap data={data} />
-          <RankCorrelationHeatmap data={data} />
-          <DistributionPanel data={data} />
-          <MetricStatsTable data={data} />
-          <RiskAdjusted data={data} />
-          <ExpectedImpact data={data} />
-          <OutlierBoard data={data} />
-          <CompoundRisk data={data} />
-          <TailConcentration data={data} />
-          <SignalEntropy data={data} />
-          <RegionalRollup data={data} />
-        </div>
+        <>
+          <Section title="Positioning & rankings" sub="where each country sits, and derived orderings">
+            <QuadrantScatter data={data} />
+            <WeightBuilder data={data} />
+            <RiskAdjusted data={data} />
+            <ExpectedImpact data={data} />
+            <CompoundRisk data={data} />
+            <RegionalRollup data={data} />
+          </Section>
+          <Section title="Distribution & statistics" sub="how each signal is spread across countries">
+            <DistributionPanel data={data} />
+            <MetricStatsTable data={data} />
+            <OutlierBoard data={data} />
+            <TailConcentration data={data} />
+            <SignalEntropy data={data} />
+          </Section>
+          <Section title="Dependencies & correlation" sub="how the signals move together">
+            <CorrelationHeatmap data={data} />
+            <RankCorrelationHeatmap data={data} />
+            <RegressionExplorer data={data} />
+          </Section>
+        </>
       )}
 
       {tab === "compare" && (
-        <div className="feat-grid">
-          <CompareCountries data={data} />
-          <PercentileProfile data={data} />
-          <PeerBenchmark data={data} />
-          <SimilarCountries data={data} />
-        </div>
+        <>
+          <Section title="Multi-country comparison" sub="up to four countries, side by side">
+            <CompareCountries data={data} />
+          </Section>
+          <Section title="Single-country benchmark" sub="rank, peers and profile for one country">
+            <PercentileProfile data={data} />
+            <PeerBenchmark data={data} />
+            <SimilarCountries data={data} />
+          </Section>
+        </>
       )}
 
       {tab === "network" && (
-        <div className="feat-grid">
-          <div className="obs-graph-row">
-            <EntityNetwork data={data} />
-            <SignalDependencyGraph data={data} />
-          </div>
-          <EntityLeaderboard data={data} />
-          <OrgCountryFlows data={data} />
-          <ConcentrationPanel data={data} />
-        </div>
+        <>
+          <Section title="Relationship graphs" sub="who connects to whom, and which signals couple">
+            <div className="obs-graph-row">
+              <EntityNetwork data={data} />
+              <SignalDependencyGraph data={data} />
+            </div>
+          </Section>
+          <Section title="Influence & concentration" sub="the most central actors and where power pools">
+            <EntityLeaderboard data={data} />
+            <OrgCountryFlows data={data} />
+            <ConcentrationPanel data={data} />
+          </Section>
+        </>
       )}
 
       {tab === "method" && (
-        <div className="feat-grid">
-          <MethodPanel />
-          <DataTable data={data} />
-        </div>
+        <>
+          <Section title="Methodology" sub="every index, defined">
+            <MethodPanel />
+          </Section>
+          <Section title="Full data" sub="the underlying per-country table">
+            <DataTable data={data} />
+          </Section>
+        </>
       )}
     </div>
   );
@@ -149,6 +169,31 @@ function ObsHeader({ persona, setPersona, tab, setTab, generatedAt, status }: {
           <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)} aria-pressed={tab === t.id}>{t.label}</button>
         ))}
       </nav>
+    </div>
+  );
+}
+
+/** A labelled band that groups related panels into a deterministic grid, giving
+ *  each tab a scannable hierarchy instead of one undifferentiated masonry. */
+function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <section className="obs-section" aria-label={title}>
+      <div className="obs-section-head">
+        <h3>{title}</h3>
+        {sub && <span>{sub}</span>}
+      </div>
+      <div className="obs-section-grid">{children}</div>
+    </section>
+  );
+}
+
+/** A standalone section eyebrow for content that isn't a panel grid (the Overview
+ *  KPI strip and analysis grid). */
+function SectionLabel({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div className="obs-section-head standalone">
+      <h3>{title}</h3>
+      {sub && <span>{sub}</span>}
     </div>
   );
 }

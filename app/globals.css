@@ -716,16 +716,24 @@ a.ent-row:hover { background: rgba(255, 255, 255, 0.05); text-decoration: none; 
 .obs-tabs button:hover { color: var(--text); }
 .obs-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-/* Masonry via CSS multi-column: tiles pack tightly top-to-bottom with no
-   dead half-cells, and `wide` panels break out to span every column. This is
-   what kills the white space that a fixed 2-col grid left under short tiles. */
-.feat-grid { columns: 2; column-gap: 12px; }
-.feat-grid > .obs-panel { break-inside: avoid; margin: 0 0 12px; width: 100%; }
-.feat-grid > .obs-panel.wide { column-span: all; }
-@media (max-width: 900px) { .feat-grid { columns: 1; } }
-@media (min-width: 1500px) { .feat-grid { columns: 3; } }
-/* Two graphs side-by-side: break out of the masonry columns, then a 2-col grid. */
-.obs-graph-row { column-span: all; break-inside: avoid; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 12px; }
+/* Sectioned hierarchy: each analytical tab is grouped into labelled bands, and
+   within a band panels flow in a DETERMINISTIC grid (reading order = DOM order),
+   so the layout reads as a considered structure rather than a masonry that
+   reshuffles tiles. Panels align to the top of their row; `wide` panels span the
+   full band. This replaced the old single CSS-columns masonry that made every
+   tab feel randomly positioned. */
+.obs-section { margin: 0 0 22px; }
+.obs-section:last-child { margin-bottom: 0; }
+.obs-section-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 11px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.obs-section-head h3 { margin: 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text); font-weight: 600; }
+.obs-section-head span { font-size: 11px; color: var(--muted-2); letter-spacing: 0.01em; }
+.obs-section-head.standalone { margin-top: 4px; }
+.obs-section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.obs-section-grid > .obs-panel.wide { grid-column: 1 / -1; }
+@media (min-width: 1600px) { .obs-section-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 860px) { .obs-section-grid { grid-template-columns: 1fr; } }
+/* Two graphs side-by-side within a band; collapses to one column when narrow. */
+.obs-graph-row { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .obs-graph-row > .obs-panel { width: 100%; margin: 0; }
 .obs-graph-row .chart.net { max-width: 100%; }
 @media (max-width: 1100px) { .obs-graph-row { grid-template-columns: 1fr; } }
