@@ -1,5 +1,6 @@
 import { prov } from "@/lib/intel/provenance";
 import { stableId } from "@/lib/core/id";
+import { fetchText } from "@/lib/fetch-json";
 import type { VaultSanction } from "@/lib/intel/schemas";
 
 /**
@@ -91,7 +92,9 @@ export function normalizeSdn(csv: string): VaultSanction[] {
 }
 
 export async function fetchOfacSdn(): Promise<VaultSanction[]> {
-  const res = await fetch(SDN_URL, { headers: { "user-agent": "atlas-ops-globe/0.1" } });
-  if (!res.ok) throw new Error(`OFAC SDN ${res.status}`);
-  return normalizeSdn(await res.text());
+  // The Treasury SDN CSV is large and occasionally slow — use the timeout-aware
+  // fetchText (default 9s abort) so a hung endpoint can't stall the sanctions
+  // sync indefinitely. 30s gives the big file room without being unbounded.
+  const csv = await fetchText(SDN_URL, { timeoutMs: 30_000 });
+  return normalizeSdn(csv);
 }

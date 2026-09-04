@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCountryProfile } from "@/lib/intel/queries";
+import { scrubError } from "@/lib/intel/safe-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,6 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ code: stri
     return NextResponse.json(profile);
   } catch (e) {
     // Vault read unavailable (e.g. Turso read quota) — degrade, don't 500.
-    return NextResponse.json({ error: "profile unavailable", degraded: true, detail: e instanceof Error ? e.message : String(e) }, { status: 200 });
+    return NextResponse.json({ error: "profile unavailable", degraded: true, detail: scrubError(e, "country-profile") }, { status: 200 });
   }
 }

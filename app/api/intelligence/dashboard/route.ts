@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getReadDb } from "@/lib/intel/db";
+import { scrubError } from "@/lib/intel/safe-route";
 import { finnhubConfigured, fetchQuotes } from "@/lib/intel/providers/finnhub";
 import { cachedFetch } from "@/lib/intel/live";
 import {
@@ -267,7 +268,7 @@ export async function GET() {
       correlations: [],
       insights: [],
       markets,
-      error: e instanceof Error ? e.message : String(e),
+      error: scrubError(e, "dashboard"),
     });
   }
 }

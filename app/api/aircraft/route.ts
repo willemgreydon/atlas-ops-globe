@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb, isRemote, syncDb } from "@/lib/intel/db";
 import { fetchAdsbLolStates } from "@/lib/providers/adsblol";
 import { cachedFetch } from "@/lib/intel/live";
+import { scrubError } from "@/lib/intel/safe-route";
 import { mockAircraft } from "@/lib/mock";
 import type { AircraftState, DataStatus } from "@/types/domain";
 
@@ -87,7 +88,7 @@ export async function GET() {
   try {
     live = await cachedFetch("aircraft:adsblol", LIVE_TTL_MS, () => fetchAdsbLolStates());
   } catch (e) {
-    liveError = e instanceof Error ? e.message : String(e);
+    liveError = scrubError(e, "aircraft-live");
   }
 
   let baseline: AircraftState[] = [];

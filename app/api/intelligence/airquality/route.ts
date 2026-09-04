@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchAirQuality } from "@/lib/providers/openmeteo-aq";
 import { attachFreshness } from "@/lib/intel/freshness";
 import { cachedFetch } from "@/lib/intel/live";
+import { scrubError } from "@/lib/intel/safe-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,6 @@ export async function GET() {
     return NextResponse.json({ ...attachFreshness(result, "weather", "observedAt"), provider: "openmeteo", attribution: "Open-Meteo Air Quality (CC BY 4.0)" });
   } catch (e) {
     const result = { data: [], page: { limit: 0, offset: 0, count: 0, nextOffset: null } };
-    return NextResponse.json({ ...attachFreshness(result, "weather", "observedAt"), provider: "openmeteo", attribution: "Open-Meteo Air Quality (CC BY 4.0)", error: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ ...attachFreshness(result, "weather", "observedAt"), provider: "openmeteo", attribution: "Open-Meteo Air Quality (CC BY 4.0)", error: scrubError(e, "airquality") });
   }
 }

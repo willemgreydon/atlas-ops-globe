@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listVessels, parseBbox, parsePage } from "@/lib/intel/queries";
 import { attachFreshness } from "@/lib/intel/freshness";
-import { emptyPage, safeVault } from "@/lib/intel/safe-route";
+import { emptyPage, safeVault, scrubError } from "@/lib/intel/safe-route";
 import { cachedFetch } from "@/lib/intel/live";
 import { aisConfigured, fetchAisSnapshot } from "@/lib/providers/aisstream";
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       const result = { data: rows, page: { limit: rows.length, offset: 0, count: rows.length, nextOffset: null } };
       return NextResponse.json({ ...attachFreshness(result, "vessels", "lastContact"), provider: "aisstream", attribution: "AISStream.io" });
     } catch (e) {
-      return NextResponse.json({ ...emptyPage({ provider: "aisstream", attribution: "AISStream.io" }, "vessels"), error: e instanceof Error ? e.message : String(e) });
+      return NextResponse.json({ ...emptyPage({ provider: "aisstream", attribution: "AISStream.io" }, "vessels"), error: scrubError(e, "maritime") });
     }
   }
   // No AIS key → honest vault read (empty/OFFLINE without MarineTraffic data).

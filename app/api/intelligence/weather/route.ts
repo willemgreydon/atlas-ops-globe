@@ -4,6 +4,7 @@ import { MAJOR_CITIES } from "@/lib/intel/geo/cities";
 import { attachFreshness } from "@/lib/intel/freshness";
 import { parseBbox, parsePage } from "@/lib/intel/queries";
 import { cachedFetch } from "@/lib/intel/live";
+import { scrubError } from "@/lib/intel/safe-route";
 import type { VaultWeatherObs } from "@/lib/intel/schemas";
 
 export const runtime = "nodejs";
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
       ...attachFreshness(result, "weather", OBSERVED_AT),
       provider: "openmeteo",
       attribution: "Open-Meteo (CC BY 4.0)",
-      error: e instanceof Error ? e.message : String(e),
+      error: scrubError(e, "weather"),
     });
   }
 }

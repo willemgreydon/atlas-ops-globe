@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchQuotes, finnhubConfigured } from "@/lib/intel/providers/finnhub";
 import { attachFreshness } from "@/lib/intel/freshness";
 import { cachedFetch } from "@/lib/intel/live";
+import { scrubError } from "@/lib/intel/safe-route";
 import type { VaultMarketObs } from "@/lib/intel/schemas";
 
 export const runtime = "nodejs";
@@ -53,6 +54,6 @@ export async function GET() {
     );
     return envelope(data);
   } catch (e) {
-    return envelope([], { error: e instanceof Error ? e.message : String(e) });
+    return envelope([], { error: scrubError(e, "markets") });
   }
 }
