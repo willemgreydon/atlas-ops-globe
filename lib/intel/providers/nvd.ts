@@ -58,6 +58,9 @@ export async function fetchNvdRecent(days = 7, apiKey = process.env.NVD_API_KEY)
   if (apiKey) headers["apiKey"] = apiKey;
   const raw = await fetchJson<unknown>(`https://services.nvd.nist.gov/rest/json/cves/2.0?${qs}`, {
     timeoutMs: 25_000,
+    // NVD's public API is heavily rate-limited and intermittently 503s; retry with
+    // backoff (runs in the daily sync, which has ample time budget).
+    retries: 2,
     headers,
   });
   const data = Schema.parse(raw);

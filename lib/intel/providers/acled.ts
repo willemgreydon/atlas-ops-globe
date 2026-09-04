@@ -139,6 +139,7 @@ export async function fetchAcledEvents(opts: { days?: number; limit?: number } =
   const raw = await fetchJson<unknown>(`${API_URL}?${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
     timeoutMs: 30_000,
+    retries: 2, // conflict sync runs in CI with ample budget; ride out transient blips
   });
   return normalizeAcled(raw);
 }
