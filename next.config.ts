@@ -60,23 +60,27 @@ const nextConfig: NextConfig = {
     // API response caching at the Vercel edge. These routes are pure functions of
     // their URL (no auth/cookies), so the CDN can serve repeats without re-running
     // the function or touching the vault — cutting latency AND blunting cost /
-    // read-quota amplification on the expensive aggregation endpoints. force-dynamic
-    // only disables Next's build cache, not the CDN response cache; the client
-    // still fetches with cache:"no-store", so browsers always revalidate while the
-    // shared edge absorbs the load. stale-while-revalidate lets a refreshed (daily
-    // sync) or recovered response propagate without a user-facing miss. Only the
-    // DB-backed routes are cached — the real-time feeds (aircraft/markets/weather/
-    // airquality/maritime) keep their own short TTL caches and stay live.
-    const cache = (v: string) => [{ key: "Cache-Control", value: v }];
-    const REFERENCE = "public, s-maxage=3600, stale-while-revalidate=86400"; // ~daily-sync reference data
-    const AGGREGATE = "public, s-maxage=120, stale-while-revalidate=600";    // expensive cross-domain rollups
-    const VAULT_LIST = "public, s-maxage=300, stale-while-revalidate=3600";  // 3h-sync vault lists
+    // read-quota amplification on the expensive aggregation endpoints. Vercel
+    // strips s-maxage from plain `Cache-Control` on force-dynamic routes, so the
+    // edge TTL is set via `CDN-Cache-Control` (which Vercel honours independently
+    // and does NOT strip); `Cache-Control` stays "always revalidate" for browsers
+    // (which fetch no-store anyway). stale-while-revalidate lets a refreshed
+    // (daily/3h sync) or recovered response propagate without a user-facing miss.
+    // Only the DB-backed routes are cached — the real-time feeds (aircraft/markets/
+    // weather/airquality/maritime) keep their own short TTL caches and stay live.
+    const edge = (sMaxage: number, swr: number) => [
+      { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+      { key: "CDN-Cache-Control", value: `public, s-maxage=${sMaxage}, stale-while-revalidate=${swr}` },
+    ];
+    const reference = () => edge(3600, 86400); // ~daily-sync reference data
+    const aggregate = () => edge(120, 600);     // expensive cross-domain rollups
+    const vaultList = () => edge(300, 3600);    // 3h-sync vault lists
     return [
       { source: "/:path*", headers: security },
-      { source: "/api/intelligence/:r(countries|sanctions|cyber|space)", headers: cache(REFERENCE) },
-      { source: "/api/intelligence/countries/:code", headers: cache(REFERENCE) },
-      { source: "/api/intelligence/:r(dashboard|global|stats)", headers: cache(AGGREGATE) },
-      { source: "/api/intelligence/:r(conflict|disasters|events|news|persons|organizations|provenance)", headers: cache(VAULT_LIST) },
+      { source: "/api/intelligence/:r(countries|sanctions|cyber|space)", headers: reference() },
+      { source: "/api/intelligence/countries/:code", headers: reference() },
+      { source: "/api/intelligence/:r(dashboard|global|stats)", headers: aggregate() },
+      { source: "/api/intelligence/:r(conflict|disasters|events|news|persons|organizations|provenance)", headers: vaultList() },
       {
         source: "/cesium/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
