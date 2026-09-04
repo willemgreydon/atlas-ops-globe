@@ -70,15 +70,20 @@ jobs:
             # weather/events are served live-at-request, so they need no sync.
             echo "domains=news disasters conflict" >> "$GITHUB_OUTPUT"
           fi
-      - name: Sync vault
-        run: pnpm intel sync ${{ steps.pick.outputs.domains }}
+      # Ingest against a LOCAL working DB seeded from the committed snapshot.
+      # We do NOT use the embedded-replica (staged) path here: while Turso's
+      # free-tier READ quota is blocked, constructing an embedded replica does an
+      # initial pull that 403s, so the sync can't even start. Seeding from the
+      # snapshot (a complete vault) gives the ingestors full reference data to
+      # build on without any Turso read; the fresh rows are mirrored to the
+      # primary in the next step.
+      - name: Sync vault (local, seeded from snapshot)
+        run: |
+          cp data/vault-snapshot.db data/intelligence.db
+          pnpm intel sync ${{ steps.pick.outputs.domains }}
         env:
-          # Staged fast path: ingest against a local pulled copy, then bulk-push
-          # to Turso via @libsql/client batch (~20s) instead of write-forwarding
-          # every statement through the embedded replica (news was ~27 min).
-          INTEL_STAGED: "1"
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL || secrets.TURSO_DB_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          # No TURSO_* / INTEL_STAGED → db.ts uses the plain local file path.
+          INTEL_DB_PATH: data/intelligence.db
           OPENSKY_CLIENT_ID: ${{ secrets.OPENSKY_CLIENT_ID }}
           OPENSKY_CLIENT_SECRET: ${{ secrets.OPENSKY_CLIENT_SECRET }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
@@ -97,17 +102,29 @@ jobs:
           ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
           NASA_API_KEY: ${{ secrets.NASA_API_KEY }}
 
+      # Mirror the freshly-ingested domains to the Turso primary (pure @libsql
+      # WRITE batch — no pull, so it's unaffected by the read block). Best-effort:
+      # if writes are ever blocked too, the snapshot is still refreshed below and
+      # the primary reconciles on the next run once writes are allowed. Keeping
+      # the primary current means live reads return fresh data the moment the
+      # read block lifts.
+      - name: Mirror fresh domains to Turso (best-effort)
+        continue-on-error: true
+        run: pnpm db:push-delta ${{ steps.pick.outputs.domains }}
+        env:
+          INTEL_DB_PATH: data/intelligence.db
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL || secrets.TURSO_DB_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
       # Refresh the committed read-only vault snapshot — the fallback the app
-      # serves when Turso's free read quota is blocked (see lib/intel/db.ts
-      # getReadDb). The staged sync above leaves the freshly-ingested rows in the
-      # local data/replica.db. NO Turso env here: the script must build from that
-      # LOCAL replica, never re-pull the primary (a pull would burn read quota /
-      # 403 while blocked). If the local replica is complete it fully rebuilds;
-      # if it's a partial fresh-runner replica it overlays only the just-synced
-      # domains onto the existing full snapshot, so reference data stays intact.
+      # serves when Turso reads are blocked (see lib/intel/db.ts getReadDb). Built
+      # from the local DB just ingested; SNAPSHOT_SKIP_TURSO keeps it fully
+      # read-free. The seeded source is complete, so this is a clean full rebuild.
       - name: Refresh vault snapshot
         run: pnpm db:snapshot
         env:
+          INTEL_DB_PATH: data/intelligence.db
+          SNAPSHOT_SKIP_TURSO: "1"
           SNAPSHOT_MERGE_DOMAINS: ${{ steps.pick.outputs.domains }}
 
       - name: Commit snapshot if changed

@@ -54,6 +54,9 @@ const mergeDomains = (process.env.SNAPSHOT_MERGE_DOMAINS ?? "").trim().split(/\s
 
 /** Pull the Turso primary into a throwaway embedded replica; null if unreachable. */
 function tursoSource(): string | null {
+  // CI ingests against a local DB and mirrors to Turso separately, so it skips
+  // the pull entirely — keeps the snapshot build fully read-free (no 403 noise).
+  if (process.env.SNAPSHOT_SKIP_TURSO === "1") return null;
   const url = process.env.TURSO_DATABASE_URL || process.env.TURSO_DB_URL;
   if (!url) return null;
   const path = join(mkdtempSync(join(tmpdir(), "vault-snap-")), "pull.db");
@@ -72,7 +75,10 @@ function tursoSource(): string | null {
 function pickSource(): string {
   const fromTurso = tursoSource();
   if (fromTurso) return fromTurso;
-  for (const f of ["data/replica.db", "data/intelligence.db"]) {
+  // Freshest local first. An explicit INTEL_DB_PATH (CI's local-ingest DB) wins;
+  // then the last embedded replica; then the dev vault.
+  const candidates = [process.env.INTEL_DB_PATH, "data/replica.db", "data/intelligence.db"].filter(Boolean) as string[];
+  for (const f of candidates) {
     const p = resolve(process.cwd(), f);
     if (existsSync(p)) { console.log(`source: ${f}`); return p; }
   }
