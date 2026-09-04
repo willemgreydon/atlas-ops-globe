@@ -57,11 +57,13 @@ jobs:
           if [ -n "${{ github.event.inputs.domains }}" ]; then
             echo "domains=${{ github.event.inputs.domains }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "30 4 * * *" ]; then
-            # Heavy daily: satellite TLEs age in ~2 days. Near-static reference
-            # data (sanctions ~19k, cyber, economics) is intentionally OFF-schedule
-            # — re-pushing it churns replicas and burns Turso reads for no benefit;
-            # refresh it manually when needed.
-            echo "domains=space" >> "$GITHUB_OUTPUT"
+            # Heavy daily (04:30): satellites (TLEs age in ~2 days) PLUS the fast
+            # media domains, because this is the run that commits the fallback
+            # snapshot (see the snapshot steps below) — so it must fold in the
+            # freshest news/conflict/disasters. Near-static reference data
+            # (sanctions ~19k, cyber, economics) stays OFF-schedule; refresh
+            # manually when needed.
+            echo "domains=space news disasters conflict" >> "$GITHUB_OUTPUT"
           else
             # Light: news (keeps the persons/orgs entity graph → Trending Entities
             # fresh) + disasters (global snapshot count) + conflict (keyless GDELT
@@ -116,11 +118,15 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL || secrets.TURSO_DB_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
-      # Refresh the committed read-only vault snapshot — the fallback the app
-      # serves when Turso reads are blocked (see lib/intel/db.ts getReadDb). Built
-      # from the local DB just ingested; SNAPSHOT_SKIP_TURSO keeps it fully
-      # read-free. The seeded source is complete, so this is a clean full rebuild.
+      # Refresh + commit the read-only vault snapshot — the fallback the app serves
+      # when Turso reads are blocked (see lib/intel/db.ts getReadDb). Gated to the
+      # DAILY run (and manual dispatch) only: the snapshot is a ~35MB binary and
+      # committing it on every 3h sync would add ~8GB/month of git history. The 3h
+      # light runs still ingest + mirror to Turso, so the primary stays fresh for
+      # when the read block lifts; the committed fallback refreshes once a day.
+      # (Permanent fix: move the snapshot off git / upgrade Turso — see the audit.)
       - name: Refresh vault snapshot
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 4 * * *'
         run: pnpm db:snapshot
         env:
           INTEL_DB_PATH: data/intelligence.db
@@ -128,6 +134,7 @@ jobs:
           SNAPSHOT_MERGE_DOMAINS: ${{ steps.pick.outputs.domains }}
 
       - name: Commit snapshot if changed
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 4 * * *'
         run: |
           if git diff --quiet -- data/vault-snapshot.db; then
             echo "snapshot unchanged — nothing to commit"
